@@ -1,11 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Nunito, Outfit, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/src/components/ui/theme-provider";
 import { TooltipProvider } from "@/src/components/ui/tooltip";
 import { AppSidebar } from "../components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/src/components/ui/sidebar";
 import { AppHeader } from "@/src/components/AppHeader";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const nunito = Nunito({
+  subsets: ["latin"],
+  variable: "--font-nunito",
+});
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${nunito.variable} ${outfit.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <TooltipProvider>
           <ThemeProvider

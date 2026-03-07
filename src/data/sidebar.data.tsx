@@ -11,13 +11,13 @@ import { SidebarData } from "../types/sidebar.types";
 
 export const sidebarData: SidebarData = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "Rajnish J",
+    email: "rajnishOfficial02@gmail.com",
     avatar: "/avatars/shadcn.jpg",
   },
   teams: [
     {
-      name: "Acme Inc",
+      name: "Rezume.ai",
       logo: <GalleryVerticalEndIcon />,
       plan: "Enterprise",
     },
