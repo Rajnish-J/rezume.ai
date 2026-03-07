@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/src/app/components/ui/theme-provider";
-import { TooltipProvider } from "@/src/app/components/ui/tooltip";
-import { AppSidebar } from "./components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/src/app/components/ui/sidebar";
-import { AppHeader } from "@/src/app/components/AppHeader";
+import { ThemeProvider } from "@/src/components/ui/theme-provider";
+import { TooltipProvider } from "@/src/components/ui/tooltip";
+import { AppSidebar } from "../components/app-sidebar";
+import { SidebarInset, SidebarProvider } from "@/src/components/ui/sidebar";
+import { AppHeader } from "@/src/components/AppHeader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

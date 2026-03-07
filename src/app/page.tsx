@@ -1,5 +1,5 @@
-import { HomeContainer } from "./HomeContainer"
+import { redirect } from "next/navigation"
 
 export default function Home() {
-  return <HomeContainer />
+  redirect("/dashboard")
 }

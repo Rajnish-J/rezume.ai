@@ -1,8 +1,8 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { SidebarTrigger } from "@/src/app/components/ui/sidebar"
-import { Separator } from "@/src/app/components/ui/separator"
+import { SidebarTrigger } from "@/src/components/ui/sidebar"
+import { Separator } from "@/src/components/ui/separator"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -10,8 +10,8 @@ import {
     BreadcrumbList,
     BreadcrumbPage,
     BreadcrumbSeparator,
-} from "@/src/app/components/ui/breadcrumb"
-import * as t from "@/src/app/components/ui/animated-theme-toggler"
+} from "@/src/components/ui/breadcrumb"
+import * as t from "@/src/components/ui/animated-theme-toggler"
 
 export const AppHeader = () => {
     const pathname = usePathname()

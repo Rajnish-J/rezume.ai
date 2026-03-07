@@ -1,7 +1,6 @@
 "use client"
 
-import * as React from "react"
-import * as t from "@/src/app/components/ui/animated-theme-toggler"
+import * as t from "@/src/components/ui/animated-theme-toggler"
 
 export const AppHeader = () => {
     return (
