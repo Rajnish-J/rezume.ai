@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/src/app/components/ui/theme-provider";
 import { TooltipProvider } from "@/src/app/components/ui/tooltip";
+import { AppSidebar } from "./components/app-sidebar";
+import { SidebarInset, SidebarProvider } from "@/src/app/components/ui/sidebar";
+import { AppHeader } from "@/src/app/components/AppHeader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
@@ -36,7 +39,13 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset>
+                <AppHeader />
+                {children}
+              </SidebarInset>
+            </SidebarProvider>
           </ThemeProvider>
         </TooltipProvider>
       </body>
