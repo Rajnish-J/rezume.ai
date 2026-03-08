@@ -23,7 +23,7 @@ export {
   uploadResume,
   fetchResumeInsights,
   askResumeAssistant,
-} from "@/src/app/resume/services/resume.service";
+} from "@/src/app/(app)/resume/services/resume.service";
 
 export {
   parseApiErrorMessage,
