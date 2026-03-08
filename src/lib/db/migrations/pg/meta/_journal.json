@@ -8,6 +8,13 @@
       "when": 1772877156153,
       "tag": "0000_pink_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772943956118,
+      "tag": "0001_yellow_plazm",
+      "breakpoints": true
     }
   ]
 }
