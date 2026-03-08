@@ -46,3 +46,26 @@ export const resumeSuggestionsTable = pgTable("resume_suggestions", {
   priority: varchar({ length: 20 }).notNull(),
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 });
+
+export const resumeChatsTable = pgTable("resume_chats", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer()
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  resumeId: integer()
+    .notNull()
+    .references(() => resumesTable.id, { onDelete: "cascade" }),
+  title: varchar({ length: 255 }).notNull(),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+});
+
+export const resumeChatMessagesTable = pgTable("resume_chat_messages", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  chatId: integer()
+    .notNull()
+    .references(() => resumeChatsTable.id, { onDelete: "cascade" }),
+  role: varchar({ length: 20 }).notNull(),
+  content: text().notNull(),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+});
