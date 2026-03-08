@@ -8,6 +8,7 @@ import { pgdb } from "@/src/lib/db/pg/db";
 import { usersTable } from "@/src/lib/db/schema";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
   },
@@ -23,7 +24,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const parsedCredentials = a.credentialsSignInSchema.safeParse(credentials);
+        const parsedCredentials =
+          a.credentialsSignInSchema.safeParse(credentials);
 
         if (!parsedCredentials.success) {
           return null;
