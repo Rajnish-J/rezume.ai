@@ -1,10 +1,9 @@
-import * as t from "@/src/types/resume.types";
-import * as u from "@/src/utils/resume/resume-client.util";
+import * as r from "@/src/imports/resume.imports";
 
 export async function uploadResume(payload: {
   userId: number;
   file: File;
-}): Promise<t.ResumeUploadResponse> {
+}): Promise<r.ResumeUploadResponse> {
   const formData = new FormData();
   formData.append("userId", payload.userId.toString());
   formData.append("file", payload.file);
@@ -17,15 +16,15 @@ export async function uploadResume(payload: {
   const responseBody = await response.json();
 
   if (!response.ok) {
-    throw new Error(u.toErrorMessage(responseBody));
+    throw new Error(r.toErrorMessage(responseBody));
   }
 
-  return t.resumeUploadResponseSchema.parse(responseBody);
+  return r.resumeUploadResponseSchema.parse(responseBody);
 }
 
 export async function fetchResumeInsights(
   userId: number,
-): Promise<t.ResumeInsightsResponse> {
+): Promise<r.ResumeInsightsResponse> {
   const response = await fetch(`/api/resume?userId=${userId}`, {
     method: "GET",
     cache: "no-store",
@@ -34,25 +33,27 @@ export async function fetchResumeInsights(
   const responseBody = await response.json();
 
   if (!response.ok) {
-    throw new Error(u.toErrorMessage(responseBody));
+    throw new Error(r.toErrorMessage(responseBody));
   }
 
   const suggestions = responseBody.suggestions.map((item: unknown) =>
-    t.resumeSuggestionSchema.parse(item),
+    r.resumeSuggestionSchema.parse(item),
   );
 
   return {
     resumeId: Number(responseBody.resumeId),
     userId: Number(responseBody.userId),
     originalFileName: String(responseBody.originalFileName),
-    parsedContext: t.parsedResumeContextSchema.parse(responseBody.parsedContext),
+    parsedContext: r.parsedResumeContextSchema.parse(
+      responseBody.parsedContext,
+    ),
     suggestions,
   };
 }
 
 export async function askResumeAssistant(
-  payload: t.ResumeChatRequest,
-): Promise<t.ResumeChatResponse> {
+  payload: r.ResumeChatRequest,
+): Promise<r.ResumeChatResponse> {
   const response = await fetch("/api/resume/chat", {
     method: "POST",
     headers: {
@@ -64,7 +65,7 @@ export async function askResumeAssistant(
   const responseBody = await response.json();
 
   if (!response.ok) {
-    throw new Error(u.toErrorMessage(responseBody));
+    throw new Error(r.toErrorMessage(responseBody));
   }
 
   return {

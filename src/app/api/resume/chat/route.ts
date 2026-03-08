@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-
-import * as a from "@/src/lib/ai/resume/resume-ai";
+import * as r from "@/src/imports/resume.imports";
 import { pgdb } from "@/src/lib/db/pg/db";
 import { resumeSuggestionsTable, resumesTable } from "@/src/lib/db/schema";
-import * as t from "@/src/types/resume.types";
-import * as u from "@/src/utils/resume/resume.util";
 
 export async function POST(request: Request) {
   const payload = await request.json();
-  const parsedPayload = t.resumeChatRequestSchema.safeParse(payload);
+  const parsedPayload = r.resumeChatRequestSchema.safeParse(payload);
 
   if (!parsedPayload.success) {
     return NextResponse.json(
-      { message: u.getZodErrorMessage(parsedPayload.error) },
+      { message: r.getZodErrorMessage(parsedPayload.error) },
       { status: 400 },
     );
   }
@@ -31,7 +28,10 @@ export async function POST(request: Request) {
       .limit(1);
 
     if (!resume) {
-      return NextResponse.json({ message: "Resume not found." }, { status: 404 });
+      return NextResponse.json(
+        { message: "Resume not found." },
+        { status: 404 },
+      );
     }
 
     const suggestionRows = await pgdb
@@ -39,18 +39,20 @@ export async function POST(request: Request) {
       .from(resumeSuggestionsTable)
       .where(eq(resumeSuggestionsTable.resumeId, resume.id));
 
-    const parsedContext = t.parsedResumeContextSchema.parse(resume.parsedContext);
+    const parsedContext = r.parsedResumeContextSchema.parse(
+      resume.parsedContext,
+    );
     const suggestions = suggestionRows.map((item) =>
-      t.resumeSuggestionSchema.parse(item),
+      r.resumeSuggestionSchema.parse(item),
     );
 
-    const answer = await a.generateResumeChatAnswer({
+    const answer = await r.generateResumeChatAnswer({
       parsedContext,
       suggestions,
       userMessage: parsedPayload.data.message,
     });
 
-    const responseBody: t.ResumeChatResponse = {
+    const responseBody: r.ResumeChatResponse = {
       answer,
     };
 

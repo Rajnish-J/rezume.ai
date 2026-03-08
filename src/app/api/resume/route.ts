@@ -1,26 +1,23 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-
-import * as a from "@/src/lib/ai/resume/resume-ai";
+import * as r from "@/src/imports/resume.imports";
 import { pgdb } from "@/src/lib/db/pg/db";
 import {
   resumeSuggestionsTable,
   resumesTable,
   usersTable,
 } from "@/src/lib/db/schema";
-import * as t from "@/src/types/resume.types";
-import * as u from "@/src/utils/resume/resume.util";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  const parsedQuery = t.userIdQuerySchema.safeParse({
+  const parsedQuery = r.userIdQuerySchema.safeParse({
     userId: requestUrl.searchParams.get("userId"),
   });
 
   if (!parsedQuery.success) {
     return NextResponse.json(
-      { message: u.getZodErrorMessage(parsedQuery.error) },
+      { message: r.getZodErrorMessage(parsedQuery.error) },
       { status: 400 },
     );
   }
@@ -50,12 +47,16 @@ export async function GET(request: Request) {
         ),
       );
 
-    const responseBody: t.ResumeInsightsResponse = {
+    const responseBody: r.ResumeInsightsResponse = {
       resumeId: latestResume.id,
       userId: latestResume.userId,
       originalFileName: latestResume.originalFileName,
-      parsedContext: t.parsedResumeContextSchema.parse(latestResume.parsedContext),
-      suggestions: suggestions.map((item) => t.resumeSuggestionSchema.parse(item)),
+      parsedContext: r.parsedResumeContextSchema.parse(
+        latestResume.parsedContext,
+      ),
+      suggestions: suggestions.map((item) =>
+        r.resumeSuggestionSchema.parse(item),
+      ),
     };
 
     return NextResponse.json(responseBody, { status: 200 });
@@ -73,13 +74,13 @@ export async function POST(request: Request) {
     const rawUserId = formData.get("userId");
     const rawFile = formData.get("file");
 
-    const parsedBody = t.uploadResumeBodySchema.safeParse({
+    const parsedBody = r.uploadResumeBodySchema.safeParse({
       userId: rawUserId,
     });
 
     if (!parsedBody.success) {
       return NextResponse.json(
-        { message: u.getZodErrorMessage(parsedBody.error) },
+        { message: r.getZodErrorMessage(parsedBody.error) },
         { status: 400 },
       );
     }
@@ -91,10 +92,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const fileValidationError = u.validateResumeFile(rawFile);
+    const fileValidationError = r.validateResumeFile(rawFile);
 
     if (fileValidationError) {
-      return NextResponse.json({ message: fileValidationError }, { status: 400 });
+      return NextResponse.json(
+        { message: fileValidationError },
+        { status: 400 },
+      );
     }
 
     const [user] = await pgdb
@@ -107,7 +111,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "User not found." }, { status: 404 });
     }
 
-    const parsedText = await u.extractTextFromFile(rawFile);
+    const parsedText = await r.extractTextFromFile(rawFile);
 
     if (!parsedText) {
       return NextResponse.json(
@@ -116,8 +120,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsedContext = u.buildParsedContextFromText(parsedText);
-    const safeFileName = u.toSafeFileName(rawFile.name);
+    const parsedContext = r.buildParsedContextFromText(parsedText);
+    const safeFileName = r.toSafeFileName(rawFile.name);
     const fileUrl = `uploads/resumes/${Date.now()}_${safeFileName}`;
 
     const [savedResume] = await pgdb
@@ -131,12 +135,14 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    const aiSuggestions = await a.generateResumeSuggestions({
+    const aiSuggestions = await r.generateResumeSuggestions({
       parsedContext,
       resumeText: parsedText,
     });
 
-    const validatedSuggestions = z.array(t.resumeSuggestionSchema).parse(aiSuggestions);
+    const validatedSuggestions = z
+      .array(r.resumeSuggestionSchema)
+      .parse(aiSuggestions);
 
     const savedSuggestions = await pgdb
       .insert(resumeSuggestionsTable)
@@ -152,7 +158,7 @@ export async function POST(request: Request) {
       )
       .returning();
 
-    const responseBody = t.resumeUploadResponseSchema.parse({
+    const responseBody = r.resumeUploadResponseSchema.parse({
       resumeId: savedResume.id,
       userId: savedResume.userId,
       parsedContext,
@@ -163,7 +169,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { message: u.getZodErrorMessage(error) },
+        { message: r.getZodErrorMessage(error) },
         { status: 400 },
       );
     }

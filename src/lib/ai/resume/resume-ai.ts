@@ -1,32 +1,30 @@
 import { generateObject, generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
-
-import * as p from "@/src/lib/ai/resume/resume-prompt";
-import * as t from "@/src/types/resume.types";
+import * as r from "@/src/imports/resume.imports";
 
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const suggestionListSchema = z.object({
-  suggestions: z.array(t.resumeSuggestionSchema).min(3).max(7),
+  suggestions: z.array(r.resumeSuggestionSchema).min(3).max(7),
 });
 
 type GenerateSuggestionsInput = {
-  parsedContext: t.ParsedResumeContext;
+  parsedContext: r.ParsedResumeContext;
   resumeText: string;
 };
 
 type GenerateChatInput = {
-  parsedContext: t.ParsedResumeContext;
-  suggestions: t.ResumeSuggestion[];
+  parsedContext: r.ParsedResumeContext;
+  suggestions: r.ResumeSuggestion[];
   userMessage: string;
 };
 
 export async function generateResumeSuggestions(
   input: GenerateSuggestionsInput,
-): Promise<t.ResumeSuggestion[]> {
+): Promise<r.ResumeSuggestion[]> {
   if (!process.env.OPENAI_API_KEY) {
     return getFallbackSuggestions(input.parsedContext);
   }
@@ -35,7 +33,7 @@ export async function generateResumeSuggestions(
     const response = await generateObject({
       model: openai("gpt-4o-mini"),
       schema: suggestionListSchema,
-      system: p.resumeSuggestionSystemPrompt,
+      system: r.resumeSuggestionSystemPrompt,
       prompt: `Parsed Context: ${JSON.stringify(input.parsedContext)}\n\nResume Text:\n${input.resumeText.slice(0, 8000)}`,
     });
 
@@ -55,7 +53,7 @@ export async function generateResumeChatAnswer(
   try {
     const response = await generateText({
       model: openai("gpt-4o-mini"),
-      system: p.resumeChatSystemPrompt,
+      system: r.resumeChatSystemPrompt,
       prompt: `Parsed Context: ${JSON.stringify(input.parsedContext)}\nSuggestions: ${JSON.stringify(input.suggestions)}\nUser Message: ${input.userMessage}`,
     });
 
@@ -66,8 +64,8 @@ export async function generateResumeChatAnswer(
 }
 
 function getFallbackSuggestions(
-  parsedContext: t.ParsedResumeContext,
-): t.ResumeSuggestion[] {
+  parsedContext: r.ParsedResumeContext,
+): r.ResumeSuggestion[] {
   const skillToMention = parsedContext.keySkills[0] ?? "relevant skills";
 
   return [
