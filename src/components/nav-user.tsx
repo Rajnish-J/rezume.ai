@@ -28,6 +28,7 @@ import {
   LogOutIcon,
   SparklesIcon,
 } from "lucide-react"
+import { signOut } from "next-auth/react"
 
 export function NavUser({
   user,
@@ -39,6 +40,10 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+
+  async function onLogout() {
+    await signOut({ callbackUrl: "/auth/sign-in" })
+  }
 
   const initials = (user.name || user.email || "U")
     .split(" ")
@@ -109,7 +114,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={onLogout}>
               <LogOutIcon />
               Log out
             </DropdownMenuItem>
