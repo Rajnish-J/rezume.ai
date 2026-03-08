@@ -68,7 +68,5 @@ export async function askResumeAssistant(
     throw new Error(r.toErrorMessage(responseBody));
   }
 
-  return {
-    answer: String(responseBody.answer ?? ""),
-  };
+  return r.resumeChatResponseSchema.parse(responseBody);
 }

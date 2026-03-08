@@ -135,14 +135,14 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    const aiSuggestions = await r.generateResumeSuggestions({
+    const aiResult = await r.generateResumeSuggestions({
       parsedContext,
       resumeText: parsedText,
     });
 
     const validatedSuggestions = z
       .array(r.resumeSuggestionSchema)
-      .parse(aiSuggestions);
+      .parse(aiResult.suggestions);
 
     const savedSuggestions = await pgdb
       .insert(resumeSuggestionsTable)
@@ -163,6 +163,7 @@ export async function POST(request: Request) {
       userId: savedResume.userId,
       parsedContext,
       suggestions: savedSuggestions,
+      tokenUsage: aiResult.tokenUsage,
     });
 
     return NextResponse.json(responseBody, { status: 201 });

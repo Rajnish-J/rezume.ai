@@ -11,22 +11,14 @@ const suggestionListSchema = z.object({
   suggestions: z.array(r.resumeSuggestionSchema).min(3).max(7),
 });
 
-type GenerateSuggestionsInput = {
-  parsedContext: r.ParsedResumeContext;
-  resumeText: string;
-};
-
-type GenerateChatInput = {
-  parsedContext: r.ParsedResumeContext;
-  suggestions: r.ResumeSuggestion[];
-  userMessage: string;
-};
-
 export async function generateResumeSuggestions(
-  input: GenerateSuggestionsInput,
-): Promise<r.ResumeSuggestion[]> {
+  input: r.GenerateSuggestionsInput,
+): Promise<{ suggestions: r.ResumeSuggestion[]; tokenUsage: r.TokenUsage }> {
   if (!process.env.OPENAI_API_KEY) {
-    return getFallbackSuggestions(input.parsedContext);
+    return {
+      suggestions: getFallbackSuggestions(input.parsedContext),
+      tokenUsage: getTokenUsage(undefined),
+    };
   }
 
   try {
@@ -37,17 +29,27 @@ export async function generateResumeSuggestions(
       prompt: `Parsed Context: ${JSON.stringify(input.parsedContext)}\n\nResume Text:\n${input.resumeText.slice(0, 8000)}`,
     });
 
-    return response.object.suggestions;
+    return {
+      suggestions: response.object.suggestions,
+      tokenUsage: getTokenUsage(response.usage),
+    };
   } catch {
-    return getFallbackSuggestions(input.parsedContext);
+    return {
+      suggestions: getFallbackSuggestions(input.parsedContext),
+      tokenUsage: getTokenUsage(undefined),
+    };
   }
 }
 
 export async function generateResumeChatAnswer(
-  input: GenerateChatInput,
-): Promise<string> {
+  input: r.GenerateChatInput,
+): Promise<{ answer: string; tokenUsage: r.TokenUsage }> {
   if (!process.env.OPENAI_API_KEY) {
-    return "Start by implementing the high-priority suggestions first, then rewrite your summary to match your target role and quantify achievements.";
+    return {
+      answer:
+        "Start by implementing the high-priority suggestions first, then rewrite your summary to match your target role and quantify achievements.",
+      tokenUsage: getTokenUsage(undefined),
+    };
   }
 
   try {
@@ -57,9 +59,16 @@ export async function generateResumeChatAnswer(
       prompt: `Parsed Context: ${JSON.stringify(input.parsedContext)}\nSuggestions: ${JSON.stringify(input.suggestions)}\nUser Message: ${input.userMessage}`,
     });
 
-    return response.text;
+    return {
+      answer: response.text,
+      tokenUsage: getTokenUsage(response.usage),
+    };
   } catch {
-    return "I could not generate a live answer right now. Please try again in a moment.";
+    return {
+      answer:
+        "I could not generate a live answer right now. Please try again in a moment.",
+      tokenUsage: getTokenUsage(undefined),
+    };
   }
 }
 
@@ -90,4 +99,16 @@ function getFallbackSuggestions(
       priority: "medium",
     },
   ];
+}
+
+function getTokenUsage(usage: r.AiUsageShape | undefined): r.TokenUsage {
+  const inputTokens = usage?.inputTokens ?? usage?.promptTokens ?? 0;
+  const outputTokens = usage?.outputTokens ?? usage?.completionTokens ?? 0;
+  const totalTokens = usage?.totalTokens ?? inputTokens + outputTokens;
+
+  return r.tokenUsageSchema.parse({
+    inputTokens,
+    outputTokens,
+    totalTokens,
+  });
 }

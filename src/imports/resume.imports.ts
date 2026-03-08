@@ -6,11 +6,17 @@ export {
   resumeSuggestionSchema,
   type ResumeChatRequest,
   type ResumeChatResponse,
+  resumeChatResponseSchema,
   userIdQuerySchema,
   uploadResumeBodySchema,
   type ParsedResumeContext,
   type ResumeSuggestion,
-  resumeChatRequestSchema
+  type TokenUsage,
+  tokenUsageSchema,
+  resumeChatRequestSchema,
+  type GenerateChatInput,
+  type GenerateSuggestionsInput,
+  type AiUsageShape,
 } from "@/src/types/resume.types";
 
 export {
@@ -24,7 +30,10 @@ export {
   toErrorMessage,
 } from "@/src/utils/resume/resume-client.util";
 
-export { generateResumeSuggestions, generateResumeChatAnswer } from "../lib/ai/resume/resume-ai";
+export {
+  generateResumeSuggestions,
+  generateResumeChatAnswer,
+} from "../lib/ai/resume/resume-ai";
 
 export {
   getZodErrorMessage,

@@ -46,15 +46,16 @@ export async function POST(request: Request) {
       r.resumeSuggestionSchema.parse(item),
     );
 
-    const answer = await r.generateResumeChatAnswer({
+    const aiResult = await r.generateResumeChatAnswer({
       parsedContext,
       suggestions,
       userMessage: parsedPayload.data.message,
     });
 
-    const responseBody: r.ResumeChatResponse = {
-      answer,
-    };
+    const responseBody = r.resumeChatResponseSchema.parse({
+      answer: aiResult.answer,
+      tokenUsage: aiResult.tokenUsage,
+    });
 
     return NextResponse.json(responseBody, { status: 200 });
   } catch {
