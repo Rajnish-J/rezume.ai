@@ -8,6 +8,14 @@ export const tokenUsageSchema = z.object({
   totalTokens: z.number().int().nonnegative(),
 });
 
+export const aiUsageShapeSchema = z.object({
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
+  promptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+});
+
 export const parsedResumeContextSchema = z.object({
   summary: z.string(),
   keySkills: z.array(z.string()),
@@ -15,30 +23,22 @@ export const parsedResumeContextSchema = z.object({
   recommendedRoles: z.array(z.string()),
 });
 
-export type GenerateSuggestionsInput = {
-  parsedContext: ParsedResumeContext;
-  resumeText: string;
-};
-
-export type GenerateChatInput = {
-  parsedContext: ParsedResumeContext;
-  suggestions: ResumeSuggestion[];
-  userMessage: string;
-};
-
-export type AiUsageShape = {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  promptTokens?: number;
-  completionTokens?: number;
-};
-
 export const resumeSuggestionSchema = z.object({
   suggestionTitle: z.string(),
   suggestion: z.string(),
   category: z.string(),
   priority: suggestionPrioritySchema,
+});
+
+export const generateSuggestionsInputSchema = z.object({
+  parsedContext: parsedResumeContextSchema,
+  resumeText: z.string(),
+});
+
+export const generateChatInputSchema = z.object({
+  parsedContext: parsedResumeContextSchema,
+  suggestions: z.array(resumeSuggestionSchema),
+  userMessage: z.string().trim().min(1),
 });
 
 export const uploadResumeBodySchema = z.object({
@@ -68,20 +68,28 @@ export const resumeChatResponseSchema = z.object({
   tokenUsage: tokenUsageSchema,
 });
 
+export const resumeInsightsResponseSchema = z.object({
+  resumeId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  originalFileName: z.string(),
+  parsedContext: parsedResumeContextSchema,
+  suggestions: z.array(resumeSuggestionSchema),
+});
+
 export type SuggestionPriority = z.infer<typeof suggestionPrioritySchema>;
 export type TokenUsage = z.infer<typeof tokenUsageSchema>;
+export type AiUsageShape = z.infer<typeof aiUsageShapeSchema>;
 export type ParsedResumeContext = z.infer<typeof parsedResumeContextSchema>;
 export type ResumeSuggestion = z.infer<typeof resumeSuggestionSchema>;
+export type GenerateSuggestionsInput = z.infer<
+  typeof generateSuggestionsInputSchema
+>;
+export type GenerateChatInput = z.infer<typeof generateChatInputSchema>;
 export type UploadResumeBody = z.infer<typeof uploadResumeBodySchema>;
 export type UserIdQuery = z.infer<typeof userIdQuerySchema>;
 export type ResumeChatRequest = z.infer<typeof resumeChatRequestSchema>;
 export type ResumeUploadResponse = z.infer<typeof resumeUploadResponseSchema>;
 export type ResumeChatResponse = z.infer<typeof resumeChatResponseSchema>;
-
-export type ResumeInsightsResponse = {
-  resumeId: number;
-  userId: number;
-  originalFileName: string;
-  parsedContext: ParsedResumeContext;
-  suggestions: ResumeSuggestion[];
-};
+export type ResumeInsightsResponse = z.infer<
+  typeof resumeInsightsResponseSchema
+>;
