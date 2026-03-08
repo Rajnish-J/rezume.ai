@@ -12,6 +12,11 @@ export const usersTable = pgTable("users", {
   name: varchar({ length: 255 }).notNull(),
   age: integer().notNull(),
   email: varchar({ length: 255 }).notNull().unique(),
+  username: varchar({ length: 100 }).unique(),
+  passwordHash: text(),
+  authProvider: varchar({ length: 50 }).notNull().default("credentials"),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 });
 
 export const resumesTable = pgTable("resumes", {
