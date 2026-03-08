@@ -7,8 +7,6 @@ export {
   type ResumeChatRequest,
   type ResumeChatResponse,
   resumeChatResponseSchema,
-  userIdQuerySchema,
-  uploadResumeBodySchema,
   type ParsedResumeContext,
   type ResumeSuggestion,
   type TokenUsage,
@@ -22,7 +20,6 @@ export {
 export {
   uploadResume,
   fetchResumeInsights,
-  askResumeAssistant,
 } from "@/src/app/(app)/resume/services/resume.service";
 
 export {
