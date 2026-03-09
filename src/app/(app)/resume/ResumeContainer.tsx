@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, MessageSquareText, Sparkles, Upload } from "lucide-react";
+import { BarChart3, Loader2, MessageSquareText, Sparkles, Upload } from "lucide-react";
 
 import * as UI from "@/src/imports/UI.imports";
 import * as r from "@/src/imports/resume.imports";
@@ -14,6 +14,23 @@ export default function ResumeContainer() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isFetching, setIsFetching] = useState<boolean>(false);
+
+  const analytics = useMemo(() => {
+    if (!insights) {
+      return [] as Array<{ label: string; value: string; tone?: "danger" | "warning" | "ok" }>;
+    }
+
+    const highPriority = insights.suggestions.filter((item) => item.priority === "high").length;
+    const mediumPriority = insights.suggestions.filter((item) => item.priority === "medium").length;
+    const lowPriority = insights.suggestions.filter((item) => item.priority === "low").length;
+
+    return [
+      { label: "Detected Skills", value: String(insights.parsedContext.keySkills.length), tone: "ok" as const },
+      { label: "Suggested Roles", value: String(insights.parsedContext.recommendedRoles.length), tone: "ok" as const },
+      { label: "High Priority Fixes", value: String(highPriority), tone: highPriority > 0 ? "danger" : "ok" as const },
+      { label: "Medium / Low", value: `${mediumPriority} / ${lowPriority}`, tone: "warning" as const },
+    ];
+  }, [insights]);
 
   async function onUploadResume() {
     if (!selectedFile) {
@@ -37,7 +54,19 @@ export default function ResumeContainer() {
         latestChatId: response.chatId,
         latestChatTitle: response.chatTitle,
       });
-      setStatusMessage(response.chatId ? "Resume uploaded. Chat created for this resume." : "Resume uploaded. Suggestions saved." );
+      if (response.chatId) {
+        window.dispatchEvent(
+          new CustomEvent("resume-chat-created", {
+            detail: { chatId: response.chatId },
+          }),
+        );
+      }
+
+      setStatusMessage(
+        response.chatId
+          ? "Resume uploaded. A new linked chat is now available in the sidebar."
+          : "Resume uploaded. Suggestions saved.",
+      );
     } catch (error) {
       setStatusMessage(r.parseApiErrorMessage(error, "Upload failed."));
     } finally {
@@ -88,9 +117,7 @@ export default function ResumeContainer() {
               <UI.Input
                 type="file"
                 accept=".txt,.md,.pdf,.doc,.docx"
-                onChange={(event) =>
-                  setSelectedFile(event.target.files?.[0] ?? null)
-                }
+                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
               />
             </div>
 
@@ -121,49 +148,84 @@ export default function ResumeContainer() {
                 )}
                 Load Latest
               </UI.Button>
-
-              <UI.Button
-                variant="outline"
-                onClick={onOpenChat}
-                disabled={!insights?.latestChatId}
-                className="cursor-pointer"
-              >
-                <MessageSquareText className="mr-2 h-4 w-4" />
-                Open Chat
-              </UI.Button>
             </div>
           </div>
         </div>
 
         <div className="rounded-xl border bg-background p-6">
-          <h2 className="text-lg font-medium">Parsed Context</h2>
+          <h2 className="text-lg font-medium">Simplistic Analytics</h2>
           {!insights ? (
             <p className="mt-4 text-sm text-muted-foreground">
-              Upload a resume or load existing insights to see parsed context.
+              Upload a resume to generate quick analytics and a linked chat.
             </p>
           ) : (
-            <div className="mt-4 space-y-4 text-sm">
-              <p>
-                <span className="font-medium">Summary:</span>{" "}
-                {insights.parsedContext.summary}
-              </p>
-              <p>
-                <span className="font-medium">Key Skills:</span>{" "}
-                {insights.parsedContext.keySkills.join(", ")}
-              </p>
-              <p>
-                <span className="font-medium">Recommended Roles:</span>{" "}
-                {insights.parsedContext.recommendedRoles.join(", ")}
-              </p>
-              {insights.latestChatTitle ? (
+            <>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {analytics.map((item) => (
+                  <div key={item.label} className="rounded-lg border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
+                    <p
+                      className={`mt-2 text-xl font-semibold ${
+                        item.tone === "danger"
+                          ? "text-red-500"
+                          : item.tone === "warning"
+                            ? "text-amber-500"
+                            : ""
+                      }`}
+                    >
+                      {item.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-lg border p-4 text-sm">
                 <p>
-                  <span className="font-medium">Linked Chat:</span>{" "}
-                  {insights.latestChatTitle}
+                  <span className="font-medium">Current Summary:</span> {insights.parsedContext.summary}
                 </p>
-              ) : null}
-            </div>
+                <p className="mt-2 text-muted-foreground">
+                  For deeper interviewer-style review and role-targeted edits, continue in chat.
+                </p>
+                <UI.Button
+                  variant="outline"
+                  onClick={onOpenChat}
+                  disabled={!insights.latestChatId}
+                  className="mt-3 cursor-pointer"
+                >
+                  <MessageSquareText className="mr-2 h-4 w-4" />
+                  Chat For More Insights
+                </UI.Button>
+              </div>
+            </>
           )}
         </div>
+      </div>
+
+      <div className="rounded-xl border bg-background p-6">
+        <h2 className="text-lg font-medium">Parsed Context</h2>
+        {!insights ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Upload a resume or load existing insights to see parsed context.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-4 text-sm">
+            <p>
+              <span className="font-medium">Summary:</span> {insights.parsedContext.summary}
+            </p>
+            <p>
+              <span className="font-medium">Key Skills:</span> {insights.parsedContext.keySkills.join(", ")}
+            </p>
+            <p>
+              <span className="font-medium">Recommended Roles:</span>{" "}
+              {insights.parsedContext.recommendedRoles.join(", ")}
+            </p>
+            {insights.latestChatTitle ? (
+              <p>
+                <span className="font-medium">Linked Chat:</span> {insights.latestChatTitle}
+              </p>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border bg-background p-6">
@@ -189,10 +251,12 @@ export default function ResumeContainer() {
 
       {statusMessage ? (
         <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-          {statusMessage}
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            {statusMessage}
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
-

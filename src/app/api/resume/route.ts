@@ -6,6 +6,7 @@ import * as r from "@/src/imports/resume.imports";
 import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
 import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
+import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import {
   resumeChatsTable,
   resumeSuggestionsTable,
@@ -33,6 +34,32 @@ function createChatTitle(
   return `${role} - ${baseName}`.slice(0, 255);
 }
 
+function inferMimeType(file: File): string {
+  if (file.type?.trim()) {
+    return file.type;
+  }
+
+  const lowerName = file.name.toLowerCase();
+
+  if (lowerName.endsWith(".pdf")) {
+    return "application/pdf";
+  }
+
+  if (lowerName.endsWith(".md") || lowerName.endsWith(".txt")) {
+    return "text/plain";
+  }
+
+  if (lowerName.endsWith(".doc")) {
+    return "application/msword";
+  }
+
+  if (lowerName.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+
+  return "application/octet-stream";
+}
+
 export async function GET() {
   const session = await auth();
   const sessionUserId = getSessionUserId(session);
@@ -42,6 +69,7 @@ export async function GET() {
   }
 
   await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
 
   try {
     const [latestResume] = await pgdb
@@ -111,6 +139,7 @@ export async function POST(request: Request) {
   }
 
   await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
 
   try {
     const formData = await request.formData();
@@ -151,9 +180,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const fileBase64 = Buffer.from(await rawFile.arrayBuffer()).toString("base64");
     const parsedContext = r.buildParsedContextFromText(parsedText);
     const safeFileName = r.toSafeFileName(rawFile.name);
-    const fileUrl = `uploads/resumes/${Date.now()}_${safeFileName}`;
+    const fileUrl = `db://resumes/${Date.now()}_${safeFileName}`;
 
     const [savedResume] = await pgdb
       .insert(resumesTable)
@@ -161,6 +191,8 @@ export async function POST(request: Request) {
         userId: sessionUserId,
         originalFileName: rawFile.name,
         fileUrl,
+        fileMimeType: inferMimeType(rawFile),
+        fileDataBase64: fileBase64,
         parsedText,
         parsedContext,
       })
@@ -230,3 +262,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+

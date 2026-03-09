@@ -76,29 +76,66 @@ function getFallbackSuggestions(
   parsedContext: r.ParsedResumeContext,
 ): r.ResumeSuggestion[] {
   const skillToMention = parsedContext.keySkills[0] ?? "relevant skills";
+  const aiSkill = parsedContext.keySkills.find((item) =>
+    ["ai", "ml", "llm", "python", "tensorflow", "pytorch"].some((token) =>
+      item.toLowerCase().includes(token),
+    ),
+  );
+  const level = inferExperienceLevel(parsedContext.summary);
 
   return [
     {
-      suggestionTitle: "Strengthen your resume summary",
+      suggestionTitle: `Tailor your summary for ${level} level roles`,
       suggestion:
-        "Rewrite the top summary in 2-3 lines with target role, years of experience, and strongest outcomes.",
+        "Rewrite the top summary in 2-3 lines with target role, years of experience, and strongest business outcomes.",
       category: "summary",
       priority: "high",
     },
     {
-      suggestionTitle: "Add measurable impact",
+      suggestionTitle: "Make projects interview-ready",
       suggestion:
-        "Convert responsibility bullets into impact bullets using metrics like %, revenue, users, or time saved.",
-      category: "experience",
+        "For each project, use one bullet each for problem context, your decisions, technical implementation, and measurable result.",
+      category: "projects",
       priority: "high",
     },
     {
-      suggestionTitle: "Improve keyword alignment",
+      suggestionTitle: "Show measurable ownership",
+      suggestion:
+        "Convert generic responsibility bullets into impact bullets using metrics like %, latency, cost, users, quality, or delivery speed.",
+      category: "interview-readiness",
+      priority: "high",
+    },
+    {
+      suggestionTitle: "Improve keyword and role alignment",
       suggestion: `Include role-relevant keywords such as ${skillToMention} in experience and skills sections for ATS matching.`,
-      category: "ats",
+      category: "ats-keywords",
+      priority: "medium",
+    },
+    {
+      suggestionTitle: "Strengthen AI and modern tooling section",
+      suggestion: aiSkill
+        ? `Clarify depth with ${aiSkill}: mention where you applied it, why it was chosen, and what measurable outcome it produced.`
+        : "If targeting modern roles, add one project bullet showing practical AI or automation usage with clear impact.",
+      category: "ai-skills",
       priority: "medium",
     },
   ];
+}
+
+function inferExperienceLevel(summary: string): "entry" | "mid" | "senior" {
+  const normalized = summary.toLowerCase();
+  const match = normalized.match(/(\d{1,2})\+?\s*years?/);
+  const years = match ? Number(match[1]) : 0;
+
+  if (years >= 7 || normalized.includes("lead") || normalized.includes("manager")) {
+    return "senior";
+  }
+
+  if (years >= 3) {
+    return "mid";
+  }
+
+  return "entry";
 }
 
 function getTokenUsage(usage: r.AiUsageShape | undefined): r.TokenUsage {
