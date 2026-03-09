@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
 import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
+import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import { resumeChatsTable, resumesTable } from "@/src/lib/db/schema";
 
 function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
   }
 
   await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
 
   const payload = (await request.json()) as { resumeId?: number; title?: string };
 
@@ -101,3 +103,4 @@ export async function POST(request: Request) {
     { status: 201 },
   );
 }
+

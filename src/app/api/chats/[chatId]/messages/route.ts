@@ -7,6 +7,7 @@ import * as r from "@/src/imports/resume.imports";
 import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
 import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
+import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import {
   resumeChatMessagesTable,
   resumeChatsTable,
@@ -41,6 +42,7 @@ export async function POST(
   }
 
   await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
 
   const params = await context.params;
   const chatId = Number(params.chatId);

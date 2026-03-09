@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import * as r from "@/src/imports/resume.imports";
 import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
+import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import { resumeSuggestionsTable, resumesTable } from "@/src/lib/db/schema";
 
 function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
   if (!sessionUserId) {
     return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
   }
+
+  await ensureResumeStorageColumnsExist();
 
   const payload = await request.json();
   const parsedPayload = r.resumeChatRequestSchema.safeParse(payload);
