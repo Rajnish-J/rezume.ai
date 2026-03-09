@@ -26,6 +26,8 @@ export const resumesTable = pgTable("resumes", {
     .references(() => usersTable.id, { onDelete: "cascade" }),
   originalFileName: varchar({ length: 255 }).notNull(),
   fileUrl: text().notNull(),
+  fileMimeType: varchar({ length: 120 }),
+  fileDataBase64: text(),
   parsedText: text().notNull(),
   parsedContext: jsonb().$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
