@@ -173,6 +173,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "User not found." }, { status: 404 });
     }
 
+    const [targetRole] = await pgdb
+      .select()
+      .from(userRoleTargetsTable)
+      .where(eq(userRoleTargetsTable.userId, parsedBody.data.userId))
+      .limit(1);
+
+    if (!targetRole) {
+      return NextResponse.json(
+        {
+          message:
+            "Select a target role from Career page before uploading resume.",
+        },
+        { status: 400 },
+      );
+    }
+
     const parsedText = await r.extractTextFromFile(rawFile);
 
     if (!parsedText) {
@@ -184,6 +200,18 @@ export async function POST(request: Request) {
 
     const fileBase64 = Buffer.from(await rawFile.arrayBuffer()).toString("base64");
     const parsedContext = r.buildParsedContextFromText(parsedText);
+    const parsedRoleSlug = roleSlugSchema.safeParse(targetRole.roleSlug);
+    const taxonomy = parsedRoleSlug.success
+      ? getRoleTaxonomyBySlug(parsedRoleSlug.data)
+      : null;
+    const parsedContextWithRole = {
+      ...parsedContext,
+      targetRole: {
+        slug: targetRole.roleSlug,
+        name: taxonomy?.name ?? targetRole.roleSlug,
+        version: targetRole.taxonomyVersion,
+      },
+    };
     const safeFileName = r.toSafeFileName(rawFile.name);
     const fileUrl = `db://resumes/${Date.now()}_${safeFileName}`;
 
@@ -196,12 +224,12 @@ export async function POST(request: Request) {
         fileMimeType: inferMimeType(rawFile),
         fileDataBase64: fileBase64,
         parsedText,
-        parsedContext,
+        parsedContext: parsedContextWithRole,
       })
       .returning();
 
     const aiResult = await r.generateResumeSuggestions({
-      parsedContext,
+      parsedContext: parsedContextWithRole,
       resumeText: parsedText,
     });
 

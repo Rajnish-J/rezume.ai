@@ -1,9 +1,12 @@
 import {
+  boolean,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
+  unique,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -48,6 +51,58 @@ export const resumeSuggestionsTable = pgTable("resume_suggestions", {
   priority: varchar({ length: 20 }).notNull(),
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 });
+
+export const skillCategoryEnum = pgEnum("skill_category", [
+  "core",
+  "production",
+  "professional",
+]);
+
+export const roleTaxonomiesTable = pgTable(
+  "role_taxonomies",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    slug: varchar({ length: 100 }).notNull(),
+    name: varchar({ length: 150 }).notNull(),
+    description: text().notNull(),
+    version: integer().notNull(),
+    isActive: boolean().notNull().default(true),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique().on(table.slug, table.version)],
+);
+
+export const roleSkillsTable = pgTable(
+  "role_skills",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    taxonomyId: integer()
+      .notNull()
+      .references(() => roleTaxonomiesTable.id, { onDelete: "cascade" }),
+    skillKey: varchar({ length: 100 }).notNull(),
+    skillName: varchar({ length: 150 }).notNull(),
+    category: skillCategoryEnum().notNull(),
+    weight: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique().on(table.taxonomyId, table.skillKey)],
+);
+
+export const userRoleTargetsTable = pgTable(
+  "user_role_targets",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer()
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    roleSlug: varchar({ length: 100 }).notNull(),
+    taxonomyVersion: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique().on(table.userId)],
+);
 
 export const resumeChatsTable = pgTable("resume_chats", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
