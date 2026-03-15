@@ -1,4 +1,6 @@
-"use client"
+"use client";
+
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   DropdownMenu,
@@ -6,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/src/components/ui/dropdown-menu"
+} from "@/src/components/ui/dropdown-menu";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -15,19 +17,26 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/src/components/ui/sidebar"
-import { MoreHorizontalIcon, FolderIcon, ArrowRightIcon, Trash2Icon } from "lucide-react"
+} from "@/src/components/ui/sidebar";
+import {
+  ArrowRightIcon,
+  FolderIcon,
+  MoreHorizontalIcon,
+  Trash2Icon,
+} from "lucide-react";
 
 export function NavProjects({
   projects,
 }: {
   projects: {
-    name: string
-    url: string
-    icon: React.ReactNode
-  }[]
+    name: string;
+    url: string;
+    icon: React.ReactNode;
+  }[];
 }) {
-  const { isMobile } = useSidebar()
+  const { isMobile } = useSidebar();
+  const router = useRouter();
+  const pathname = usePathname();
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -35,20 +44,18 @@ export function NavProjects({
       <SidebarMenu>
         {projects.map((item) => (
           <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton asChild>
-              <a href={item.url}>
-                {item.icon}
-                <span>{item.name}</span>
-              </a>
+            <SidebarMenuButton
+              isActive={pathname === item.url}
+              onClick={() => router.push(item.url)}
+              className="cursor-pointer"
+            >
+              {item.icon}
+              <span>{item.name}</span>
             </SidebarMenuButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuAction
-                  showOnHover
-                  className="aria-expanded:bg-muted"
-                >
-                  <MoreHorizontalIcon
-                  />
+                <SidebarMenuAction showOnHover className="aria-expanded:bg-muted">
+                  <MoreHorizontalIcon />
                   <span className="sr-only">More</span>
                 </SidebarMenuAction>
               </DropdownMenuTrigger>
@@ -57,9 +64,9 @@ export function NavProjects({
                 side={isMobile ? "bottom" : "right"}
                 align={isMobile ? "end" : "start"}
               >
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push(item.url)}>
                   <FolderIcon className="text-muted-foreground" />
-                  <span>View Project</span>
+                  <span>Open</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <ArrowRightIcon className="text-muted-foreground" />
@@ -82,5 +89,5 @@ export function NavProjects({
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarGroup>
-  )
+  );
 }

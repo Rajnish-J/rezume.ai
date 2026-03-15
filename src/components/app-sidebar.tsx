@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { NavMain } from "../components/nav-main"
-import { NavProjects } from "../components/nav-projects"
+import { NavChats } from "../components/nav-chats"
 import { NavUser } from "../components/nav-user"
 import { TeamSwitcher } from "../components/team-switcher"
 import {
@@ -15,7 +15,22 @@ import {
 } from "@/src/components/ui/sidebar"
 import { sidebarData } from "../data/sidebar.data"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+type AppSidebarUser = {
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
+
+export function AppSidebar({
+  user,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & { user?: AppSidebarUser }) {
+  const sidebarUser = {
+    name: user?.name ?? sidebarData.user.name,
+    email: user?.email ?? sidebarData.user.email,
+    avatar: user?.image ?? sidebarData.user.avatar,
+  }
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -23,10 +38,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={sidebarData.navMain} />
-        <NavProjects projects={sidebarData.projects} />
+        <NavChats />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={sidebarData.user} />
+        <NavUser user={sidebarUser} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

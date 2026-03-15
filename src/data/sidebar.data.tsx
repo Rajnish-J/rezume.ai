@@ -1,12 +1,14 @@
 import {
-  GalleryVerticalEndIcon,
-  AudioLinesIcon,
-  TerminalIcon,
   BookOpenIcon,
   FrameIcon,
-  PieChartIcon,
+  GalleryVerticalEndIcon,
+  AudioLinesIcon,
   MapIcon,
+  PieChartIcon,
+  TerminalIcon,
+  MessageSquareIcon,
 } from "lucide-react";
+
 import { SidebarData } from "../types/sidebar.types";
 
 export const sidebarData: SidebarData = {
@@ -46,6 +48,12 @@ export const sidebarData: SidebarData = {
       items: [],
     },
     {
+      title: "Chat",
+      url: "/chat",
+      icon: <MessageSquareIcon />,
+      items: [],
+    },
+    {
       title: "Career",
       url: "/career",
       icon: <FrameIcon />,
@@ -55,17 +63,22 @@ export const sidebarData: SidebarData = {
   projects: [
     {
       name: "Design Engineering",
-      url: "#",
+      url: "/dashboard",
       icon: <FrameIcon />,
     },
     {
       name: "Sales & Marketing",
-      url: "#",
+      url: "/resume",
       icon: <PieChartIcon />,
     },
     {
+      name: "Resume Chats",
+      url: "/chat",
+      icon: <MessageSquareIcon />,
+    },
+    {
       name: "Travel",
-      url: "#",
+      url: "/career",
       icon: <MapIcon />,
     },
   ],
