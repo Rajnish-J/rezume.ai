@@ -1,19 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, Loader2, MessageSquareText, Sparkles, Upload } from "lucide-react";
+import {
+  BarChart3,
+  Copy,
+  Loader2,
+  MessageSquareText,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 
 import * as UI from "@/src/imports/UI.imports";
 import * as r from "@/src/imports/resume.imports";
 
 export default function ResumeContainer() {
+  const allowedExtensions = [".txt", ".md", ".pdf", ".doc", ".docx"];
+  const maxFileSizeInBytes = 5 * 1024 * 1024;
+
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string>("");
   const [insights, setInsights] = useState<r.ResumeInsightsResponse | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isFetching, setIsFetching] = useState<boolean>(false);
+  const [isCopyingPlan, setIsCopyingPlan] = useState<boolean>(false);
 
   const analytics = useMemo(() => {
     if (!insights) {
@@ -31,6 +44,94 @@ export default function ResumeContainer() {
       { label: "Medium / Low", value: `${mediumPriority} / ${lowPriority}`, tone: "warning" as const },
     ];
   }, [insights]);
+
+  const filteredSuggestions = useMemo(() => {
+    if (!insights) {
+      return [];
+    }
+
+    if (priorityFilter === "all") {
+      return insights.suggestions;
+    }
+
+    return insights.suggestions.filter((item) => item.priority === priorityFilter);
+  }, [insights, priorityFilter]);
+
+  useEffect(() => {
+    async function loadInitialInsights() {
+      try {
+        setIsFetching(true);
+        const response = await r.fetchResumeInsights();
+        setInsights(response);
+      } catch {
+        // Keep page quiet on first load when user has no uploaded resume yet.
+      } finally {
+        setIsFetching(false);
+      }
+    }
+
+    void loadInitialInsights();
+  }, []);
+
+  function validateFile(file: File | null): string {
+    if (!file) {
+      return "";
+    }
+
+    if (file.size <= 0) {
+      return "Selected file is empty.";
+    }
+
+    if (file.size > maxFileSizeInBytes) {
+      return "File size must be less than 5MB.";
+    }
+
+    const lowerName = file.name.toLowerCase();
+    const isAllowed = allowedExtensions.some((extension) =>
+      lowerName.endsWith(extension),
+    );
+
+    if (!isAllowed) {
+      return `Unsupported file type. Use: ${allowedExtensions.join(", ")}`;
+    }
+
+    return "";
+  }
+
+  function onFileChange(file: File | null) {
+    const validationError = validateFile(file);
+    setFileError(validationError);
+    setSelectedFile(validationError ? null : file);
+    if (validationError) {
+      setStatusMessage(validationError);
+    }
+  }
+
+  async function onCopyActionPlan() {
+    if (!insights || insights.suggestions.length === 0) {
+      setStatusMessage("No suggestions available to copy.");
+      return;
+    }
+
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    const topSuggestions = [...insights.suggestions]
+      .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
+      .slice(0, 5);
+
+    const actionPlan = topSuggestions
+      .map((item, index) => `${index + 1}. [${item.priority.toUpperCase()}] ${item.suggestionTitle}: ${item.suggestion}`)
+      .join("\n");
+
+    try {
+      setIsCopyingPlan(true);
+      await navigator.clipboard.writeText(actionPlan);
+      setStatusMessage("Top action plan copied to clipboard.");
+    } catch {
+      setStatusMessage("Could not copy action plan. Try again.");
+    } finally {
+      setIsCopyingPlan(false);
+    }
+  }
 
   async function onUploadResume() {
     if (!selectedFile) {
@@ -117,14 +218,24 @@ export default function ResumeContainer() {
               <UI.Input
                 type="file"
                 accept=".txt,.md,.pdf,.doc,.docx"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
               />
+              <p className="text-xs text-muted-foreground">
+                Accepted: .txt, .md, .pdf, .doc, .docx (max 5MB)
+              </p>
+              {selectedFile ? (
+                <p className="text-xs text-muted-foreground">
+                  Selected: {selectedFile.name} (
+                  {(selectedFile.size / 1024).toFixed(1)} KB)
+                </p>
+              ) : null}
+              {fileError ? <p className="text-xs text-red-500">{fileError}</p> : null}
             </div>
 
             <div className="flex flex-wrap gap-3">
               <UI.Button
                 onClick={onUploadResume}
-                disabled={isUploading || isFetching}
+                disabled={isUploading || isFetching || Boolean(fileError)}
                 className="cursor-pointer"
               >
                 {isUploading ? (
@@ -147,6 +258,18 @@ export default function ResumeContainer() {
                   <Sparkles className="mr-2 h-4 w-4" />
                 )}
                 Load Latest
+              </UI.Button>
+
+              <UI.Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedFile(null);
+                  setFileError("");
+                }}
+                disabled={isUploading || isFetching || !selectedFile}
+                className="cursor-pointer"
+              >
+                Clear File
               </UI.Button>
             </div>
           </div>
@@ -229,14 +352,44 @@ export default function ResumeContainer() {
       </div>
 
       <div className="rounded-xl border bg-background p-6">
-        <h2 className="text-lg font-medium">AI Suggestions</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">AI Suggestions</h2>
+          <div className="flex flex-wrap gap-2">
+            {(["all", "high", "medium", "low"] as const).map((value) => (
+              <UI.Button
+                key={value}
+                type="button"
+                variant={priorityFilter === value ? "default" : "outline"}
+                className="h-8 cursor-pointer px-3 text-xs uppercase"
+                onClick={() => setPriorityFilter(value)}
+                disabled={!insights || insights.suggestions.length === 0}
+              >
+                {value}
+              </UI.Button>
+            ))}
+            <UI.Button
+              type="button"
+              variant="secondary"
+              className="h-8 cursor-pointer px-3 text-xs"
+              onClick={onCopyActionPlan}
+              disabled={!insights || insights.suggestions.length === 0 || isCopyingPlan}
+            >
+              {isCopyingPlan ? (
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+              ) : (
+                <Copy className="mr-2 h-3 w-3" />
+              )}
+              Copy Action Plan
+            </UI.Button>
+          </div>
+        </div>
         {!insights || insights.suggestions.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
             Suggestions will appear after resume processing.
           </p>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {insights.suggestions.map((item, index) => (
+            {filteredSuggestions.map((item, index) => (
               <div key={`${item.suggestionTitle}-${index}`} className="rounded-lg border p-4">
                 <p className="text-sm font-medium">{item.suggestionTitle}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{item.suggestion}</p>
@@ -245,6 +398,11 @@ export default function ResumeContainer() {
                 </p>
               </div>
             ))}
+            {filteredSuggestions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No suggestions match this priority filter.
+              </p>
+            ) : null}
           </div>
         )}
       </div>
