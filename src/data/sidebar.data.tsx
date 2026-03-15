@@ -5,6 +5,7 @@ import {
   AudioLinesIcon,
   MapIcon,
   PieChartIcon,
+  MilestoneIcon,
   TerminalIcon,
   MessageSquareIcon,
 } from "lucide-react";
@@ -59,6 +60,12 @@ export const sidebarData: SidebarData = {
       icon: <FrameIcon />,
       items: [],
     },
+    {
+      title: "Roadmap",
+      url: "/roadmap",
+      icon: <MilestoneIcon />,
+      items: [],
+    },
   ],
   projects: [
     {
@@ -80,6 +87,11 @@ export const sidebarData: SidebarData = {
       name: "Travel",
       url: "/career",
       icon: <MapIcon />,
+    },
+    {
+      name: "Roadmaps",
+      url: "/roadmap",
+      icon: <MilestoneIcon />,
     },
   ],
 };

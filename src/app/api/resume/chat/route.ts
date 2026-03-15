@@ -7,7 +7,9 @@ import { pgdb } from "@/src/lib/db/pg/db";
 import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import { resumeSuggestionsTable, resumesTable } from "@/src/lib/db/schema";
 
-function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+type SessionLike = { user?: { id?: string | null } } | null;
+
+function getSessionUserId(session: SessionLike): number | null {
   const rawId = session?.user?.id;
   const parsed = Number(rawId);
 

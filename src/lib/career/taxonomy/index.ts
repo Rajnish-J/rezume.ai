@@ -24,31 +24,30 @@ export function getRoleTaxonomyBySlug(roleSlug: RoleSlug): RoleTaxonomy | null {
 
 export async function ensureRoleTaxonomiesPersisted() {
   for (const taxonomy of taxonomyRegistry) {
-    const [createdTaxonomy] = await pgdb
-      .insert(roleTaxonomiesTable)
-      .values({
-        slug: taxonomy.slug,
-        name: taxonomy.name,
-        description: taxonomy.description,
-        version: taxonomy.version,
-        isActive: true,
-      })
-      .onConflictDoNothing()
-      .returning();
+    const [existingTaxonomy] = await pgdb
+      .select()
+      .from(roleTaxonomiesTable)
+      .where(
+        and(
+          eq(roleTaxonomiesTable.slug, taxonomy.slug),
+          eq(roleTaxonomiesTable.version, taxonomy.version),
+        ),
+      )
+      .limit(1);
 
     const persistedTaxonomy =
-      createdTaxonomy ??
+      existingTaxonomy ??
       (
         await pgdb
-          .select()
-          .from(roleTaxonomiesTable)
-          .where(
-            and(
-              eq(roleTaxonomiesTable.slug, taxonomy.slug),
-              eq(roleTaxonomiesTable.version, taxonomy.version),
-            ),
-          )
-          .limit(1)
+          .insert(roleTaxonomiesTable)
+          .values({
+            slug: taxonomy.slug,
+            name: taxonomy.name,
+            description: taxonomy.description,
+            version: taxonomy.version,
+            isActive: true,
+          })
+          .returning()
       )[0];
 
     if (!persistedTaxonomy) {
@@ -73,6 +72,6 @@ export async function ensureRoleTaxonomiesPersisted() {
         category: skill.category,
         weight: skill.weight,
       })),
-    ).onConflictDoNothing();
+    );
   }
 }

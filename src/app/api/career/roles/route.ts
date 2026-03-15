@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { listRolesResponseSchema } from "@/src/types/career.types";
+import { ensureCareerSchemaExists } from "@/src/lib/db/pg/ensure-career-schema";
 import {
   ensureRoleTaxonomiesPersisted,
   getAllRoleTaxonomies,
@@ -8,6 +9,7 @@ import {
 
 export async function GET() {
   try {
+    await ensureCareerSchemaExists();
     await ensureRoleTaxonomiesPersisted();
 
     const roles = getAllRoleTaxonomies().map((taxonomy) => ({

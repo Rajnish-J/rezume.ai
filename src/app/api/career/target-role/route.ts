@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
 import { pgdb } from "@/src/lib/db/pg/db";
+import { ensureCareerSchemaExists } from "@/src/lib/db/pg/ensure-career-schema";
 import { usersTable, userRoleTargetsTable } from "@/src/lib/db/schema";
 import {
   getRoleTaxonomyBySlug,
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await ensureCareerSchemaExists();
     const [targetRole] = await pgdb
       .select()
       .from(userRoleTargetsTable)
@@ -86,6 +88,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "User not found." }, { status: 404 });
     }
 
+    await ensureCareerSchemaExists();
     await ensureRoleTaxonomiesPersisted();
 
     const taxonomy = getRoleTaxonomyBySlug(parsedBody.data.roleSlug);

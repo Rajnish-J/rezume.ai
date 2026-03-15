@@ -49,5 +49,11 @@ export async function fetchResumeInsights(): Promise<r.ResumeInsightsResponse> {
       responseBody.latestChatTitle == null
         ? null
         : String(responseBody.latestChatTitle),
+    readinessReport: responseBody.readinessReport
+      ? r.readinessReportSchema.parse(responseBody.readinessReport)
+      : undefined,
+    interviewRoadmap: responseBody.interviewRoadmap
+      ? r.interviewRoadmapSchema.parse(responseBody.interviewRoadmap)
+      : undefined,
   };
 }

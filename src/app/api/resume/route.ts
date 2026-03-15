@@ -3,18 +3,34 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import * as r from "@/src/imports/resume.imports";
+import {
+  evaluateResumeReadiness,
+  generateInterviewRoadmap,
+  inferProfileLevelFromResume,
+} from "@/src/lib/career/scoring/readiness-engine";
+import { getRoleTaxonomyBySlug, ensureRoleTaxonomiesPersisted } from "@/src/lib/career/taxonomy";
 import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
+import { ensureCareerSchemaExists } from "@/src/lib/db/pg/ensure-career-schema";
 import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
 import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
+import { roleSlugSchema } from "@/src/types/career.types";
 import {
   resumeChatsTable,
   resumeSuggestionsTable,
   resumesTable,
+  userRoleTargetsTable,
   usersTable,
 } from "@/src/lib/db/schema";
+import {
+  fetchLatestReadinessReportForResume,
+  saveReadinessReport,
+} from "@/src/utils/resume/readiness.util";
+import { saveInterviewRoadmap } from "@/src/utils/resume/roadmap.util";
 
-function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+type SessionLike = { user?: { id?: string | null } } | null;
+
+function getSessionUserId(session: SessionLike): number | null {
   const rawId = session?.user?.id;
   const parsed = Number(rawId);
 
@@ -70,6 +86,8 @@ export async function GET() {
 
   await ensureChatTablesExist();
   await ensureResumeStorageColumnsExist();
+  await ensureCareerSchemaExists();
+  await ensureRoleTaxonomiesPersisted();
 
   try {
     const [latestResume] = await pgdb
@@ -108,6 +126,39 @@ export async function GET() {
       .orderBy(desc(resumeChatsTable.updatedAt))
       .limit(1);
 
+    const [targetRole] = await pgdb
+      .select()
+      .from(userRoleTargetsTable)
+      .where(eq(userRoleTargetsTable.userId, sessionUserId))
+      .limit(1);
+
+    let readinessReport: r.ReadinessReport | undefined;
+    let interviewRoadmap: r.InterviewRoadmap | undefined;
+
+    if (targetRole) {
+      const parsedRoleSlug = roleSlugSchema.safeParse(targetRole.roleSlug);
+      const taxonomy = parsedRoleSlug.success
+        ? getRoleTaxonomyBySlug(parsedRoleSlug.data)
+        : null;
+
+      if (taxonomy) {
+        readinessReport =
+          (await fetchLatestReadinessReportForResume({
+            resumeId: latestResume.id,
+            userId: sessionUserId,
+          })) ??
+          evaluateResumeReadiness({
+            resumeText: latestResume.parsedText,
+            taxonomy,
+          });
+
+        interviewRoadmap = generateInterviewRoadmap({
+          report: readinessReport,
+          profileLevel: inferProfileLevelFromResume(latestResume.parsedText),
+        });
+      }
+    }
+
     const responseBody: r.ResumeInsightsResponse = {
       resumeId: latestResume.id,
       originalFileName: latestResume.originalFileName,
@@ -119,6 +170,8 @@ export async function GET() {
       ),
       latestChatId: latestChat?.id ?? null,
       latestChatTitle: latestChat?.title ?? null,
+      readinessReport,
+      interviewRoadmap,
     };
 
     return NextResponse.json(responseBody, { status: 200 });
@@ -140,6 +193,8 @@ export async function POST(request: Request) {
 
   await ensureChatTablesExist();
   await ensureResumeStorageColumnsExist();
+  await ensureCareerSchemaExists();
+  await ensureRoleTaxonomiesPersisted();
 
   try {
     const formData = await request.formData();
@@ -174,14 +229,14 @@ export async function POST(request: Request) {
     const [targetRole] = await pgdb
       .select()
       .from(userRoleTargetsTable)
-      .where(eq(userRoleTargetsTable.userId, parsedBody.data.userId))
+      .where(eq(userRoleTargetsTable.userId, sessionUserId))
       .limit(1);
 
     if (!targetRole) {
       return NextResponse.json(
         {
           message:
-            "Select a target role from Career page before uploading resume.",
+            "Select your target role from Career page before uploading resume.",
         },
         { status: 400 },
       );
@@ -199,15 +254,29 @@ export async function POST(request: Request) {
     const fileBase64 = Buffer.from(await rawFile.arrayBuffer()).toString("base64");
     const parsedContext = r.buildParsedContextFromText(parsedText);
     const parsedRoleSlug = roleSlugSchema.safeParse(targetRole.roleSlug);
-    const taxonomy = parsedRoleSlug.success
-      ? getRoleTaxonomyBySlug(parsedRoleSlug.data)
-      : null;
+
+    if (!parsedRoleSlug.success) {
+      return NextResponse.json(
+        { message: "Invalid target role. Please select role again from Career." },
+        { status: 400 },
+      );
+    }
+
+    const taxonomy = getRoleTaxonomyBySlug(parsedRoleSlug.data);
+
+    if (!taxonomy) {
+      return NextResponse.json(
+        { message: "Target role taxonomy not found. Please reselect target role." },
+        { status: 400 },
+      );
+    }
+
     const parsedContextWithRole = {
       ...parsedContext,
       targetRole: {
-        slug: targetRole.roleSlug,
-        name: taxonomy?.name ?? targetRole.roleSlug,
-        version: targetRole.taxonomyVersion,
+        slug: taxonomy.slug,
+        name: taxonomy.name,
+        version: taxonomy.version,
       },
     };
     const safeFileName = r.toSafeFileName(rawFile.name);
@@ -257,7 +326,7 @@ export async function POST(request: Request) {
         .values({
           userId: savedResume.userId,
           resumeId: savedResume.id,
-          title: createChatTitle(rawFile.name, parsedContext),
+          title: createChatTitle(rawFile.name, parsedContextWithRole),
         })
         .returning();
 
@@ -266,13 +335,38 @@ export async function POST(request: Request) {
       chat = null;
     }
 
+    const readinessReport = evaluateResumeReadiness({
+      resumeText: parsedText,
+      taxonomy,
+    });
+
+    await saveReadinessReport({
+      resumeId: savedResume.id,
+      userId: savedResume.userId,
+      report: readinessReport,
+    });
+
+    const interviewRoadmap = generateInterviewRoadmap({
+      report: readinessReport,
+      profileLevel: inferProfileLevelFromResume(parsedText),
+    });
+
+    await saveInterviewRoadmap({
+      userId: savedResume.userId,
+      resumeId: savedResume.id,
+      roleSlug: taxonomy.slug,
+      roadmap: interviewRoadmap,
+    });
+
     const responseBody = r.resumeUploadResponseSchema.parse({
       resumeId: savedResume.id,
-      parsedContext,
+      parsedContext: parsedContextWithRole,
       suggestions: savedSuggestions,
       tokenUsage: aiResult.tokenUsage,
       chatId: chat?.id ?? null,
       chatTitle: chat?.title ?? null,
+      readinessReport,
+      interviewRoadmap,
     });
 
     return NextResponse.json(responseBody, { status: 201 });

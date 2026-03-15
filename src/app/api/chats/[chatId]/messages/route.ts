@@ -5,6 +5,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 
 import * as r from "@/src/imports/resume.imports";
 import { auth } from "@/src/lib/auth/auth";
+import { resolveChatModel } from "@/src/lib/ai/chat-models";
 import { pgdb } from "@/src/lib/db/pg/db";
 import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
 import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
@@ -20,7 +21,9 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+type SessionLike = { user?: { id?: string | null } } | null;
+
+function getSessionUserId(session: SessionLike): number | null {
   const rawId = session?.user?.id;
   const parsed = Number(rawId);
 
@@ -152,6 +155,7 @@ export async function POST(
 
   const body = (await request.json()) as {
     messages?: Array<{ role?: string; content?: unknown }>;
+    selectedModel?: string;
   };
 
   const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
@@ -216,8 +220,9 @@ export async function POST(
     .join("\n");
 
   const applyToResume = shouldApplyToResume(latestUserText);
+  const selectedModel = resolveChatModel(body.selectedModel);
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!selectedModel) {
     const fallback = await r.generateResumeChatAnswer({
       parsedContext,
       suggestions: validatedSuggestions,
@@ -251,7 +256,7 @@ export async function POST(
 
   try {
     const result = streamText({
-      model: openai("gpt-4o-mini"),
+      model: selectedModel.model,
       system: r.resumeChatSystemPrompt,
       prompt: `Resume Context: ${JSON.stringify(parsedContext)}\nSuggestions: ${JSON.stringify(validatedSuggestions)}\nChat History:\n${historyPrompt}\n\nLatest User Message:\n${latestUserText}`,
       onFinish: async ({ text, usage }) => {

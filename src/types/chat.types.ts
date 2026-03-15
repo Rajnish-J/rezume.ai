@@ -25,7 +25,20 @@ export const chatThreadDetailResponseSchema = z.object({
   messages: z.array(chatMessageSchema),
 });
 
+export const chatModelOptionSchema = z.object({
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  provider: z.string().trim().min(1),
+});
+
+export const chatModelsResponseSchema = z.object({
+  models: z.array(chatModelOptionSchema),
+  defaultModel: z.string().trim().min(1),
+});
+
 export type ChatThread = z.infer<typeof chatThreadSchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type ChatThreadsResponse = z.infer<typeof chatThreadsResponseSchema>;
 export type ChatThreadDetailResponse = z.infer<typeof chatThreadDetailResponseSchema>;
+export type ChatModelOption = z.infer<typeof chatModelOptionSchema>;
+export type ChatModelsResponse = z.infer<typeof chatModelsResponseSchema>;
