@@ -13,63 +13,21 @@ import {
   resumesTable,
   usersTable,
 } from "@/src/lib/db/schema";
+import { getRoleTaxonomyBySlug } from "@/src/lib/career/taxonomy";
+import { roleSlugSchema } from "@/src/types/career.types";
 
-function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
-  const rawId = session?.user?.id;
-  const parsed = Number(rawId);
+export async function GET(request: Request) {
+  const requestUrl = new URL(request.url);
+  const parsedQuery = r.userIdQuerySchema.safeParse({
+    userId: requestUrl.searchParams.get("userId"),
+  });
 
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    return null;
+  if (!parsedQuery.success) {
+    return NextResponse.json(
+      { message: r.getZodErrorMessage(parsedQuery.error) },
+      { status: 400 },
+    );
   }
-
-  return parsed;
-}
-
-function createChatTitle(
-  originalFileName: string,
-  parsedContext: r.ParsedResumeContext,
-): string {
-  const role = parsedContext.recommendedRoles[0] ?? "Resume";
-  const baseName = originalFileName.replace(/\.[^/.]+$/, "").trim() || "resume";
-  return `${role} - ${baseName}`.slice(0, 255);
-}
-
-function inferMimeType(file: File): string {
-  if (file.type?.trim()) {
-    return file.type;
-  }
-
-  const lowerName = file.name.toLowerCase();
-
-  if (lowerName.endsWith(".pdf")) {
-    return "application/pdf";
-  }
-
-  if (lowerName.endsWith(".md") || lowerName.endsWith(".txt")) {
-    return "text/plain";
-  }
-
-  if (lowerName.endsWith(".doc")) {
-    return "application/msword";
-  }
-
-  if (lowerName.endsWith(".docx")) {
-    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  }
-
-  return "application/octet-stream";
-}
-
-export async function GET() {
-  const session = await auth();
-  const sessionUserId = getSessionUserId(session);
-
-  if (!sessionUserId) {
-    return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-  }
-
-  await ensureChatTablesExist();
-  await ensureResumeStorageColumnsExist();
 
   try {
     const [latestResume] = await pgdb
@@ -171,6 +129,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "User not found." }, { status: 404 });
     }
 
+    const [targetRole] = await pgdb
+      .select()
+      .from(userRoleTargetsTable)
+      .where(eq(userRoleTargetsTable.userId, parsedBody.data.userId))
+      .limit(1);
+
+    if (!targetRole) {
+      return NextResponse.json(
+        {
+          message:
+            "Select a target role from Career page before uploading resume.",
+        },
+        { status: 400 },
+      );
+    }
+
     const parsedText = await r.extractTextFromFile(rawFile);
 
     if (!parsedText) {
@@ -182,6 +156,18 @@ export async function POST(request: Request) {
 
     const fileBase64 = Buffer.from(await rawFile.arrayBuffer()).toString("base64");
     const parsedContext = r.buildParsedContextFromText(parsedText);
+    const parsedRoleSlug = roleSlugSchema.safeParse(targetRole.roleSlug);
+    const taxonomy = parsedRoleSlug.success
+      ? getRoleTaxonomyBySlug(parsedRoleSlug.data)
+      : null;
+    const parsedContextWithRole = {
+      ...parsedContext,
+      targetRole: {
+        slug: targetRole.roleSlug,
+        name: taxonomy?.name ?? targetRole.roleSlug,
+        version: targetRole.taxonomyVersion,
+      },
+    };
     const safeFileName = r.toSafeFileName(rawFile.name);
     const fileUrl = `db://resumes/${Date.now()}_${safeFileName}`;
 
@@ -194,12 +180,12 @@ export async function POST(request: Request) {
         fileMimeType: inferMimeType(rawFile),
         fileDataBase64: fileBase64,
         parsedText,
-        parsedContext,
+        parsedContext: parsedContextWithRole,
       })
       .returning();
 
     const aiResult = await r.generateResumeSuggestions({
-      parsedContext,
+      parsedContext: parsedContextWithRole,
       resumeText: parsedText,
     });
 
@@ -240,7 +226,8 @@ export async function POST(request: Request) {
 
     const responseBody = r.resumeUploadResponseSchema.parse({
       resumeId: savedResume.id,
-      parsedContext,
+      userId: savedResume.userId,
+      parsedContext: parsedContextWithRole,
       suggestions: savedSuggestions,
       tokenUsage: aiResult.tokenUsage,
       chatId: chat?.id ?? null,
