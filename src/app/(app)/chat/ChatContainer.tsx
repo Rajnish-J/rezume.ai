@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "ai/react";
 import { ExternalLink, FileDown, FileText, Globe, Loader2, MessageSquare, Plus } from "lucide-react";
@@ -8,6 +8,7 @@ import { ExternalLink, FileDown, FileText, Globe, Loader2, MessageSquare, Plus }
 import * as UI from "@/src/imports/UI.imports";
 import * as c from "@/src/imports/chat.imports";
 import {
+  fetchChatModels,
   fetchChatThreadDetail,
   fetchChatThreads,
 } from "@/src/app/(app)/chat/services/chat.service";
@@ -21,6 +22,11 @@ type ChatMessage = {
 type ResumePdfMeta = {
   url: string;
   name: string;
+};
+
+type GuidanceData = {
+  suggestions: Array<{ title: string; suggestion: string; priority: string }>;
+  weakSkills: Array<{ skillName: string; score: number; strength: string; explanation: string }>;
 };
 
 function isResumeUpdatePrompt(message: string): boolean {
@@ -40,6 +46,11 @@ function ChatWindow({
   onAssistantFinish,
   onUserSubmit,
   onAssistantError,
+  autoPrompt,
+  onAutoPromptConsumed,
+  availableModels,
+  selectedModel,
+  onModelChange,
 }: {
   chatId: number;
   title: string;
@@ -49,11 +60,20 @@ function ChatWindow({
   onAssistantFinish: () => void;
   onUserSubmit: (text: string) => void;
   onAssistantError: (message: string) => void;
+  autoPrompt: string | null;
+  onAutoPromptConsumed: () => void;
+  availableModels: c.ChatModelOption[];
+  selectedModel: string;
+  onModelChange: (modelId: string) => void;
 }) {
-  const { messages, input, handleInputChange, handleSubmit, status } = useChat({
+  const hasAutoPromptSentRef = useRef<boolean>(false);
+  const { messages, input, handleInputChange, handleSubmit, status, append } = useChat({
     id: `chat-${chatId}`,
     api: `/api/chats/${chatId}/messages`,
     initialMessages,
+    body: {
+      selectedModel,
+    },
     onFinish: async () => {
       await onRefreshThreads();
       onAssistantFinish();
@@ -63,6 +83,24 @@ function ChatWindow({
     },
     streamProtocol: "text",
   });
+
+  useEffect(() => {
+    async function submitAutoPrompt() {
+      if (!autoPrompt || hasAutoPromptSentRef.current) {
+        return;
+      }
+
+      hasAutoPromptSentRef.current = true;
+      onUserSubmit(autoPrompt);
+      await append({
+        role: "user",
+        content: autoPrompt,
+      });
+      onAutoPromptConsumed();
+    }
+
+    void submitAutoPrompt();
+  }, [append, autoPrompt, onAutoPromptConsumed, onUserSubmit]);
 
   const isSending = status === "submitted" || status === "streaming";
 
@@ -138,7 +176,17 @@ function ChatWindow({
               <span className="inline-flex items-center gap-2 text-muted-foreground">
                 <Globe className="h-4 w-4" /> Search
               </span>
-              <span className="text-muted-foreground">GPT-4o</span>
+              <select
+                value={selectedModel}
+                onChange={(event) => onModelChange(event.target.value)}
+                className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+              >
+                {availableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <UI.Button
@@ -159,6 +207,7 @@ export default function ChatContainer() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryChatId = searchParams.get("chatId");
+  const autoPromptQuery = searchParams.get("autoprompt");
 
   const [threads, setThreads] = useState<c.ChatThread[]>([]);
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
@@ -172,6 +221,10 @@ export default function ChatContainer() {
   const [isPdfDocked, setIsPdfDocked] = useState<boolean>(false);
   const [pdfVersion, setPdfVersion] = useState<number>(0);
   const [isPdfUpdating, setIsPdfUpdating] = useState<boolean>(false);
+  const [guidance, setGuidance] = useState<GuidanceData | null>(null);
+  const [isLoadingGuidance, setIsLoadingGuidance] = useState<boolean>(false);
+  const [availableModels, setAvailableModels] = useState<c.ChatModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("");
 
   const loadThreads = useCallback(async () => {
     try {
@@ -191,6 +244,24 @@ export default function ChatContainer() {
 
     void init();
   }, [loadThreads]);
+
+  useEffect(() => {
+    async function loadModels() {
+      try {
+        const response = await fetchChatModels();
+        setAvailableModels(response.models);
+        setSelectedModel(response.defaultModel);
+      } catch (error) {
+        setStatusMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to load AI model options.",
+        );
+      }
+    }
+
+    void loadModels();
+  }, []);
 
   useEffect(() => {
     function onChatCreated() {
@@ -248,6 +319,37 @@ export default function ChatContainer() {
 
     void loadMessages();
   }, [activeChatId]);
+
+  useEffect(() => {
+    async function loadGuidance() {
+      if (!activeChatId) {
+        setGuidance(null);
+        return;
+      }
+
+      try {
+        setIsLoadingGuidance(true);
+        const response = await fetch(`/api/chats/${activeChatId}/guidance`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          setGuidance(null);
+          return;
+        }
+
+        const responseBody = (await response.json()) as GuidanceData;
+        setGuidance(responseBody);
+      } catch {
+        setGuidance(null);
+      } finally {
+        setIsLoadingGuidance(false);
+      }
+    }
+
+    void loadGuidance();
+  }, [activeChatId, initialMessages.length]);
 
   useEffect(() => {
     async function loadPdfMeta() {
@@ -323,27 +425,100 @@ export default function ChatContainer() {
               Loading conversation...
             </div>
           ) : (
-            <ChatWindow
-              key={activeKey}
-              chatId={activeChatId}
-              title={activeTitle}
-              initialMessages={initialMessages}
-              onRefreshThreads={loadThreads}
-              onOpenPdf={() => setIsPdfModalOpen(true)}
-              onAssistantFinish={() => {
-                setPdfVersion((prev) => prev + 1);
-                setIsPdfUpdating(false);
-              }}
-              onUserSubmit={(text) => {
-                if (isResumeUpdatePrompt(text)) {
-                  setIsPdfUpdating(true);
-                }
-              }}
-              onAssistantError={(message) => {
-                setStatusMessage(message);
-                setIsPdfUpdating(false);
-              }}
-            />
+            <div className="flex h-full min-h-0 flex-col gap-4">
+              <div className="rounded-xl border bg-background p-4">
+                <h3 className="text-sm font-semibold">Corrections To Implement</h3>
+                {isLoadingGuidance ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
+                    Loading corrections...
+                  </p>
+                ) : !guidance ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No corrections found for this chat yet.
+                  </p>
+                ) : (
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Top Suggestions
+                      </p>
+                      <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+                        {guidance.suggestions.slice(0, 4).map((item, index) => (
+                          <li key={`${item.title}-${index}`}>
+                            <span className="font-medium text-foreground">{item.title}:</span>{" "}
+                            {item.suggestion}
+                            {activeChatId ? (
+                              <UI.Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 h-7 cursor-pointer text-xs"
+                                onClick={() =>
+                                  router.replace(
+                                    `/chat?chatId=${activeChatId}&autoprompt=${encodeURIComponent(
+                                      `Please update my resume and apply this suggestion directly: ${item.title}. Details: ${item.suggestion}`,
+                                    )}`,
+                                  )
+                                }
+                              >
+                                Apply
+                              </UI.Button>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Weak / Missing Skills
+                      </p>
+                      <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+                        {guidance.weakSkills.slice(0, 4).map((item, index) => (
+                          <li key={`${item.skillName}-${index}`}>
+                            <span className="font-medium text-foreground">
+                              {item.skillName} ({item.score}%):
+                            </span>{" "}
+                            {item.explanation}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <ChatWindow
+                key={activeKey}
+                chatId={activeChatId}
+                title={activeTitle}
+                initialMessages={initialMessages}
+                onRefreshThreads={loadThreads}
+                onOpenPdf={() => setIsPdfModalOpen(true)}
+                onAssistantFinish={() => {
+                  setPdfVersion((prev) => prev + 1);
+                  setIsPdfUpdating(false);
+                }}
+                onUserSubmit={(text) => {
+                  if (isResumeUpdatePrompt(text)) {
+                    setIsPdfUpdating(true);
+                  }
+                }}
+                onAssistantError={(message) => {
+                  setStatusMessage(message);
+                  setIsPdfUpdating(false);
+                }}
+                autoPrompt={autoPromptQuery}
+                onAutoPromptConsumed={() => {
+                  if (activeChatId) {
+                    router.replace(`/chat?chatId=${activeChatId}`);
+                  }
+                }}
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+              />
+            </div>
           )}
         </section>
 

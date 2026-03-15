@@ -29,3 +29,18 @@ export async function fetchChatThreadDetail(chatId: number): Promise<c.ChatThrea
 
   return c.chatThreadDetailResponseSchema.parse(responseBody);
 }
+
+export async function fetchChatModels(): Promise<c.ChatModelsResponse> {
+  const response = await fetch("/api/chats/models", {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const responseBody = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseBody?.message || "Failed to fetch chat models.");
+  }
+
+  return c.chatModelsResponseSchema.parse(responseBody);
+}
