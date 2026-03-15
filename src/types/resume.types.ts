@@ -21,6 +21,13 @@ export const parsedResumeContextSchema = z.object({
   keySkills: z.array(z.string()),
   highlights: z.array(z.string()),
   recommendedRoles: z.array(z.string()),
+  targetRole: z
+    .object({
+      slug: z.string().trim().min(1),
+      name: z.string().trim().min(1),
+      version: z.number().int().positive(),
+    })
+    .optional(),
 });
 
 export const resumeSuggestionSchema = z.object({
