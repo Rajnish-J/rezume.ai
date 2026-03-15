@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
-import { streamText } from "ai";
+import { generateText, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 
 import * as r from "@/src/imports/resume.imports";
@@ -14,6 +14,7 @@ import {
   resumeSuggestionsTable,
   resumesTable,
 } from "@/src/lib/db/schema";
+import { createSimpleResumePdfFromText } from "@/src/utils/resume/pdf-builder.util";
 
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -28,6 +29,89 @@ function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | n
   }
 
   return parsed;
+}
+
+function extractMessageText(content: unknown): string {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (!part || typeof part !== "object") {
+          return "";
+        }
+
+        const maybeText = (part as { text?: unknown }).text;
+        return typeof maybeText === "string" ? maybeText : "";
+      })
+      .join("\n")
+      .trim();
+  }
+
+  return "";
+}
+
+function shouldApplyToResume(message: string): boolean {
+  const normalized = message.toLowerCase();
+  const hasVerb = /(update|rewrite|modify|change|add|remove|improve|delete|fix|edit)/.test(normalized);
+  const hasTarget = /(resume|cv|pdf|section|bullet|certification|experience|skills|summary|project)/.test(normalized);
+
+  return hasVerb && hasTarget;
+}
+
+async function applyResumeInstruction(options: {
+  resumeId: number;
+  currentText: string;
+  instruction: string;
+  assistantReply: string;
+}) {
+  let updatedText = options.currentText;
+
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const rewrite = await generateText({
+        model: openai("gpt-4o-mini"),
+        system:
+          "You are an expert resume writer. Rewrite the resume based on user instruction while preserving factual integrity. Return only the updated plain-text resume.",
+        prompt: `Current Resume:\n${options.currentText.slice(0, 14000)}\n\nUser Instruction:\n${options.instruction}\n\nAssistant Guidance:\n${options.assistantReply}`,
+      });
+
+      if (rewrite.text.trim()) {
+        updatedText = rewrite.text.trim();
+      }
+    } catch {
+      updatedText = `${options.currentText}\n\nUpdated Notes:\n${options.assistantReply}`;
+    }
+  } else {
+    updatedText = `${options.currentText}\n\nUpdated Notes:\n${options.assistantReply}`;
+  }
+
+  const parsedContext = r.buildParsedContextFromText(updatedText);
+  const pdfBytes = createSimpleResumePdfFromText(updatedText);
+  const fileDataBase64 = Buffer.from(pdfBytes).toString("base64");
+
+  await pgdb
+    .update(resumesTable)
+    .set({
+      parsedText: updatedText,
+      parsedContext,
+      fileMimeType: "application/pdf",
+      fileDataBase64,
+      updatedAt: new Date(),
+    })
+    .where(eq(resumesTable.id, options.resumeId));
+}
+
+function toTextResponse(text: string): Response {
+  return new Response(text, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 export async function POST(
@@ -67,15 +151,17 @@ export async function POST(
   }
 
   const body = (await request.json()) as {
-    messages?: Array<{ role?: string; content?: string }>;
+    messages?: Array<{ role?: string; content?: unknown }>;
   };
 
   const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
   const latestUserMessage = [...incomingMessages]
     .reverse()
-    .find((message) => message.role === "user" && message.content?.trim());
+    .find((message) => message.role === "user" && extractMessageText(message.content));
 
-  if (!latestUserMessage?.content) {
+  const latestUserText = extractMessageText(latestUserMessage?.content);
+
+  if (!latestUserText) {
     return NextResponse.json(
       { message: "A user message is required." },
       { status: 400 },
@@ -85,7 +171,7 @@ export async function POST(
   await pgdb.insert(resumeChatMessagesTable).values({
     chatId: thread.id,
     role: "user",
-    content: latestUserMessage.content,
+    content: latestUserText,
   });
 
   await pgdb
@@ -129,15 +215,51 @@ export async function POST(
     .map((row) => `${row.role === "user" ? "User" : "Assistant"}: ${row.content}`)
     .join("\n");
 
+  const applyToResume = shouldApplyToResume(latestUserText);
+
+  if (!process.env.OPENAI_API_KEY) {
+    const fallback = await r.generateResumeChatAnswer({
+      parsedContext,
+      suggestions: validatedSuggestions,
+      userMessage: latestUserText,
+    });
+
+    console.info("[chat-fallback-token-usage]", fallback.tokenUsage);
+
+    await pgdb.insert(resumeChatMessagesTable).values({
+      chatId: thread.id,
+      role: "assistant",
+      content: fallback.answer,
+    });
+
+    if (applyToResume) {
+      await applyResumeInstruction({
+        resumeId: resume.id,
+        currentText: resume.parsedText,
+        instruction: latestUserText,
+        assistantReply: fallback.answer,
+      });
+    }
+
+    await pgdb
+      .update(resumeChatsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(resumeChatsTable.id, thread.id));
+
+    return toTextResponse(fallback.answer);
+  }
+
   try {
     const result = streamText({
       model: openai("gpt-4o-mini"),
       system: r.resumeChatSystemPrompt,
-      prompt: `Resume Context: ${JSON.stringify(parsedContext)}\nSuggestions: ${JSON.stringify(validatedSuggestions)}\nChat History:\n${historyPrompt}`,
-      onFinish: async ({ text }) => {
+      prompt: `Resume Context: ${JSON.stringify(parsedContext)}\nSuggestions: ${JSON.stringify(validatedSuggestions)}\nChat History:\n${historyPrompt}\n\nLatest User Message:\n${latestUserText}`,
+      onFinish: async ({ text, usage }) => {
         if (!text?.trim()) {
           return;
         }
+
+        console.info("[chat-stream-token-usage]", usage);
 
         await pgdb.insert(resumeChatMessagesTable).values({
           chatId: thread.id,
@@ -145,18 +267,58 @@ export async function POST(
           content: text,
         });
 
+        if (applyToResume) {
+          await applyResumeInstruction({
+            resumeId: resume.id,
+            currentText: resume.parsedText,
+            instruction: latestUserText,
+            assistantReply: text,
+          });
+        }
+
         await pgdb
           .update(resumeChatsTable)
           .set({ updatedAt: new Date() })
           .where(eq(resumeChatsTable.id, thread.id));
       },
+      onError: (error) => {
+        console.error("[chat-stream-error]", error);
+        return "I hit an issue generating the response. Please try once more.";
+      },
     });
 
-    return result.toDataStreamResponse();
-  } catch {
-    return NextResponse.json(
-      { message: "Failed to generate chat response." },
-      { status: 500 },
-    );
+    return result.toTextStreamResponse();
+  } catch (error) {
+    console.error("[chat-route-catch]", error);
+
+    const fallback = await r.generateResumeChatAnswer({
+      parsedContext,
+      suggestions: validatedSuggestions,
+      userMessage: latestUserText,
+    });
+
+    console.info("[chat-catch-fallback-token-usage]", fallback.tokenUsage);
+
+    await pgdb.insert(resumeChatMessagesTable).values({
+      chatId: thread.id,
+      role: "assistant",
+      content: fallback.answer,
+    });
+
+    if (applyToResume) {
+      await applyResumeInstruction({
+        resumeId: resume.id,
+        currentText: resume.parsedText,
+        instruction: latestUserText,
+        assistantReply: fallback.answer,
+      });
+    }
+
+    await pgdb
+      .update(resumeChatsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(resumeChatsTable.id, thread.id));
+
+    return toTextResponse(fallback.answer);
   }
 }

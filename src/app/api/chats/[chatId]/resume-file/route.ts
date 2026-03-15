@@ -115,7 +115,7 @@ export async function HEAD(
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ chatId: string }> },
 ) {
   const params = await context.params;
@@ -125,11 +125,14 @@ export async function GET(
     return loaded.error;
   }
 
+  const url = new URL(request.url);
+  const shouldDownload = url.searchParams.get("download") === "1";
+
   return new NextResponse(loaded.data.bytes, {
     status: 200,
     headers: {
       "Content-Type": loaded.data.mimeType,
-      "Content-Disposition": `inline; filename="${loaded.data.fileName}"`,
+      "Content-Disposition": `${shouldDownload ? "attachment" : "inline"}; filename="${loaded.data.fileName}"`,
       "Cache-Control": "private, max-age=120",
     },
   });
