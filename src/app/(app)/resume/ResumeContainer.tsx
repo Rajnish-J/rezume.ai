@@ -7,7 +7,9 @@ import {
   Copy,
   Loader2,
   MessageSquareText,
+  Milestone,
   Sparkles,
+  Target,
   Upload,
 } from "lucide-react";
 
@@ -27,6 +29,7 @@ export default function ResumeContainer() {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [isCopyingPlan, setIsCopyingPlan] = useState<boolean>(false);
+  const [showRoadmap, setShowRoadmap] = useState<boolean>(false);
 
   const analytics = useMemo(() => {
     if (!insights) {
@@ -154,6 +157,8 @@ export default function ResumeContainer() {
         suggestions: response.suggestions,
         latestChatId: response.chatId,
         latestChatTitle: response.chatTitle,
+        readinessReport: response.readinessReport,
+        interviewRoadmap: response.interviewRoadmap,
       });
       if (response.chatId) {
         window.dispatchEvent(
@@ -198,6 +203,27 @@ export default function ResumeContainer() {
     }
 
     router.push(`/chat?chatId=${insights.latestChatId}`);
+  }
+
+  function onApplySuggestion(suggestion: r.ResumeSuggestion) {
+    if (!insights?.latestChatId) {
+      setStatusMessage("Upload resume first to create linked chat before applying suggestions.");
+      return;
+    }
+
+    const prompt = `Please update my resume and apply this suggestion directly: ${suggestion.suggestionTitle}. Details: ${suggestion.suggestion}`;
+    router.push(`/chat?chatId=${insights.latestChatId}&autoprompt=${encodeURIComponent(prompt)}`);
+  }
+
+  function onToggleRoadmap() {
+    if (!insights?.interviewRoadmap) {
+      setStatusMessage(
+        "Roadmap is not available yet. Set your target role and upload resume again.",
+      );
+      return;
+    }
+
+    setShowRoadmap((previous) => !previous);
   }
 
   return (
@@ -342,12 +368,137 @@ export default function ResumeContainer() {
               <span className="font-medium">Recommended Roles:</span>{" "}
               {insights.parsedContext.recommendedRoles.join(", ")}
             </p>
+            {insights.parsedContext.targetRole ? (
+              <p>
+                <span className="font-medium">Target Role:</span>{" "}
+                {insights.parsedContext.targetRole.name} (v
+                {insights.parsedContext.targetRole.version})
+              </p>
+            ) : null}
             {insights.latestChatTitle ? (
               <p>
                 <span className="font-medium">Linked Chat:</span> {insights.latestChatTitle}
               </p>
             ) : null}
           </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border bg-background p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">Readiness & Explainability</h2>
+          {insights?.readinessReport ? (
+            <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
+              {insights.readinessReport.roleName} | v
+              {insights.readinessReport.taxonomyVersion}
+            </span>
+          ) : null}
+        </div>
+
+        {!insights?.readinessReport ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Select a target role from Career page and upload resume to see readiness scoring.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall</p>
+                <p className="mt-2 text-xl font-semibold">{insights.readinessReport.readinessScore}%</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Core</p>
+                <p className="mt-2 text-xl font-semibold">{insights.readinessReport.coverage.core}%</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Production</p>
+                <p className="mt-2 text-xl font-semibold">{insights.readinessReport.coverage.production}%</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Professional</p>
+                <p className="mt-2 text-xl font-semibold">{insights.readinessReport.coverage.professional}%</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-muted-foreground">
+              {insights.readinessReport.summary}
+            </p>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {insights.readinessReport.assessments
+                .slice()
+                .sort((left, right) => left.score - right.score)
+                .slice(0, 6)
+                .map((assessment) => (
+                  <div key={assessment.skillKey} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{assessment.skillName}</p>
+                      <span className="text-xs uppercase text-muted-foreground">
+                        {assessment.score}% | {assessment.strength}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{assessment.explanation}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Evidence: claim {assessment.evidence.claimed ? "yes" : "no"} | project{" "}
+                      {assessment.evidence.projectProven ? "yes" : "no"} | experience{" "}
+                      {assessment.evidence.experienceProven ? "yes" : "no"}
+                    </p>
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="rounded-xl border bg-background p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">Interview Roadmap</h2>
+          <UI.Button
+            type="button"
+            variant="secondary"
+            onClick={onToggleRoadmap}
+            disabled={!insights?.interviewRoadmap}
+            className="cursor-pointer"
+          >
+            {showRoadmap ? (
+              <Target className="mr-2 h-4 w-4" />
+            ) : (
+              <Milestone className="mr-2 h-4 w-4" />
+            )}
+            {showRoadmap ? "Hide Roadmap" : "Generate Roadmap"}
+          </UI.Button>
+        </div>
+
+        {!insights?.interviewRoadmap ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Roadmap is generated after scoring. Keep target role selected and upload resume.
+          </p>
+        ) : showRoadmap ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Target: {insights.interviewRoadmap.targetRole} | Profile:{" "}
+              {insights.interviewRoadmap.profileLevel} | Duration:{" "}
+              {insights.interviewRoadmap.estimatedDurationWeeks} weeks
+            </p>
+            {insights.interviewRoadmap.steps.map((step, index) => (
+              <div key={`${step.phase}-${index}`} className="rounded-lg border p-4">
+                <p className="text-sm font-medium">{step.phase}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  <span className="font-medium">Focus:</span> {step.focus}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  <span className="font-medium">Output:</span> {step.output}
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">
+                  Interview round: {step.interviewRound}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Click Generate Roadmap to view your interview prep plan.
+          </p>
         )}
       </div>
 
@@ -396,6 +547,15 @@ export default function ResumeContainer() {
                 <p className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">
                   {item.category} - {item.priority}
                 </p>
+                <UI.Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-8 cursor-pointer px-3 text-xs"
+                  onClick={() => onApplySuggestion(item)}
+                  disabled={!insights?.latestChatId}
+                >
+                  Apply In Resume
+                </UI.Button>
               </div>
             ))}
             {filteredSuggestions.length === 0 ? (
