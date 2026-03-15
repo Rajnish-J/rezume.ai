@@ -13,21 +13,63 @@ import {
   resumesTable,
   usersTable,
 } from "@/src/lib/db/schema";
-import { getRoleTaxonomyBySlug } from "@/src/lib/career/taxonomy";
-import { roleSlugSchema } from "@/src/types/career.types";
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const parsedQuery = r.userIdQuerySchema.safeParse({
-    userId: requestUrl.searchParams.get("userId"),
-  });
+function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+  const rawId = session?.user?.id;
+  const parsed = Number(rawId);
 
-  if (!parsedQuery.success) {
-    return NextResponse.json(
-      { message: r.getZodErrorMessage(parsedQuery.error) },
-      { status: 400 },
-    );
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
   }
+
+  return parsed;
+}
+
+function createChatTitle(
+  originalFileName: string,
+  parsedContext: r.ParsedResumeContext,
+): string {
+  const role = parsedContext.recommendedRoles[0] ?? "Resume";
+  const baseName = originalFileName.replace(/\.[^/.]+$/, "").trim() || "resume";
+  return `${role} - ${baseName}`.slice(0, 255);
+}
+
+function inferMimeType(file: File): string {
+  if (file.type?.trim()) {
+    return file.type;
+  }
+
+  const lowerName = file.name.toLowerCase();
+
+  if (lowerName.endsWith(".pdf")) {
+    return "application/pdf";
+  }
+
+  if (lowerName.endsWith(".md") || lowerName.endsWith(".txt")) {
+    return "text/plain";
+  }
+
+  if (lowerName.endsWith(".doc")) {
+    return "application/msword";
+  }
+
+  if (lowerName.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+
+  return "application/octet-stream";
+}
+
+export async function GET() {
+  const session = await auth();
+  const sessionUserId = getSessionUserId(session);
+
+  if (!sessionUserId) {
+    return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+  }
+
+  await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
 
   try {
     const [latestResume] = await pgdb
@@ -226,8 +268,7 @@ export async function POST(request: Request) {
 
     const responseBody = r.resumeUploadResponseSchema.parse({
       resumeId: savedResume.id,
-      userId: savedResume.userId,
-      parsedContext: parsedContextWithRole,
+      parsedContext,
       suggestions: savedSuggestions,
       tokenUsage: aiResult.tokenUsage,
       chatId: chat?.id ?? null,
