@@ -6,6 +6,7 @@ import {
   MapIcon,
   PieChartIcon,
   TerminalIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 
 import { SidebarData } from "../types/sidebar.types";
@@ -47,6 +48,12 @@ export const sidebarData: SidebarData = {
       items: [],
     },
     {
+      title: "Chat",
+      url: "/chat",
+      icon: <MessageSquareIcon />,
+      items: [],
+    },
+    {
       title: "Career",
       url: "/career",
       icon: <FrameIcon />,
@@ -63,6 +70,11 @@ export const sidebarData: SidebarData = {
       name: "Sales & Marketing",
       url: "/resume",
       icon: <PieChartIcon />,
+    },
+    {
+      name: "Resume Chats",
+      url: "/chat",
+      icon: <MessageSquareIcon />,
     },
     {
       name: "Travel",

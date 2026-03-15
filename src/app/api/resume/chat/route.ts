@@ -1,10 +1,33 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
+
 import * as r from "@/src/imports/resume.imports";
+import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
+import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import { resumeSuggestionsTable, resumesTable } from "@/src/lib/db/schema";
 
+function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+  const rawId = session?.user?.id;
+  const parsed = Number(rawId);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
 export async function POST(request: Request) {
+  const session = await auth();
+  const sessionUserId = getSessionUserId(session);
+
+  if (!sessionUserId) {
+    return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+  }
+
+  await ensureResumeStorageColumnsExist();
+
   const payload = await request.json();
   const parsedPayload = r.resumeChatRequestSchema.safeParse(payload);
 
@@ -22,7 +45,7 @@ export async function POST(request: Request) {
       .where(
         and(
           eq(resumesTable.id, parsedPayload.data.resumeId),
-          eq(resumesTable.userId, parsedPayload.data.userId),
+          eq(resumesTable.userId, sessionUserId),
         ),
       )
       .limit(1);

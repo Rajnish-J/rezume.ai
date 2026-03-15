@@ -22,6 +22,13 @@
       "when": 1772979017929,
       "tag": "0002_outgoing_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772985391249,
+      "tag": "0003_chat_threads",
+      "breakpoints": true
     }
   ]
 }

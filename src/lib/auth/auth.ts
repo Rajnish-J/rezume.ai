@@ -80,21 +80,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         .limit(1);
 
       if (!existingUser) {
-        await pgdb.insert(usersTable).values({
-          name: user.name ?? "Google User",
-          age: 18,
-          email: user.email,
-          username: null,
-          passwordHash: null,
-          authProvider: "google",
-        });
+        const [createdUser] = await pgdb
+          .insert(usersTable)
+          .values({
+            name: user.name ?? "Google User",
+            age: 18,
+            email: user.email,
+            username: null,
+            passwordHash: null,
+            authProvider: "google",
+          })
+          .returning();
+
+        user.id = String(createdUser.id);
+        return true;
       }
 
+      user.id = String(existingUser.id);
       return true;
     },
     async jwt({ token, user }) {
       if (user?.id) {
         token.sub = user.id;
+      }
+
+      const numericSub = Number(token.sub);
+
+      if ((!Number.isInteger(numericSub) || numericSub <= 0) && token.email) {
+        const [dbUser] = await pgdb
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(eq(usersTable.email, token.email))
+          .limit(1);
+
+        if (dbUser) {
+          token.sub = String(dbUser.id);
+        }
       }
 
       return token;

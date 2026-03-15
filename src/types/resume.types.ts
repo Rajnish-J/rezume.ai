@@ -41,26 +41,18 @@ export const generateChatInputSchema = z.object({
   userMessage: z.string().trim().min(1),
 });
 
-export const uploadResumeBodySchema = z.object({
-  userId: z.coerce.number().int().positive(),
-});
-
-export const userIdQuerySchema = z.object({
-  userId: z.coerce.number().int().positive(),
-});
-
 export const resumeChatRequestSchema = z.object({
-  userId: z.number().int().positive(),
   resumeId: z.number().int().positive(),
   message: z.string().trim().min(1),
 });
 
 export const resumeUploadResponseSchema = z.object({
   resumeId: z.number().int().positive(),
-  userId: z.number().int().positive(),
   parsedContext: parsedResumeContextSchema,
   suggestions: z.array(resumeSuggestionSchema),
   tokenUsage: tokenUsageSchema,
+  chatId: z.number().int().positive().nullable(),
+  chatTitle: z.string().nullable(),
 });
 
 export const resumeChatResponseSchema = z.object({
@@ -70,10 +62,11 @@ export const resumeChatResponseSchema = z.object({
 
 export const resumeInsightsResponseSchema = z.object({
   resumeId: z.number().int().positive(),
-  userId: z.number().int().positive(),
   originalFileName: z.string(),
   parsedContext: parsedResumeContextSchema,
   suggestions: z.array(resumeSuggestionSchema),
+  latestChatId: z.number().int().positive().nullable(),
+  latestChatTitle: z.string().nullable(),
 });
 
 export type SuggestionPriority = z.infer<typeof suggestionPrioritySchema>;
@@ -85,11 +78,10 @@ export type GenerateSuggestionsInput = z.infer<
   typeof generateSuggestionsInputSchema
 >;
 export type GenerateChatInput = z.infer<typeof generateChatInputSchema>;
-export type UploadResumeBody = z.infer<typeof uploadResumeBodySchema>;
-export type UserIdQuery = z.infer<typeof userIdQuerySchema>;
 export type ResumeChatRequest = z.infer<typeof resumeChatRequestSchema>;
 export type ResumeUploadResponse = z.infer<typeof resumeUploadResponseSchema>;
 export type ResumeChatResponse = z.infer<typeof resumeChatResponseSchema>;
 export type ResumeInsightsResponse = z.infer<
   typeof resumeInsightsResponseSchema
 >;
+

@@ -124,7 +124,9 @@ export default function SignInContainer() {
                 onClick={onGoogleSignIn}
               >
                 <Image src="/google.png" alt="Google" width={16} height={16} className="mr-2 h-4 w-4" />
-                Continue with Google
+                <span className="text-background">
+                  Continue with Google
+                </span>
               </UI.Button>
 
               <p className="text-center text-sm text-slate-700">

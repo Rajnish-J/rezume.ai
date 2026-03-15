@@ -1,11 +1,9 @@
 import * as r from "@/src/imports/resume.imports";
 
 export async function uploadResume(payload: {
-  userId: number;
   file: File;
 }): Promise<r.ResumeUploadResponse> {
   const formData = new FormData();
-  formData.append("userId", payload.userId.toString());
   formData.append("file", payload.file);
 
   const response = await fetch("/api/resume", {
@@ -22,10 +20,8 @@ export async function uploadResume(payload: {
   return r.resumeUploadResponseSchema.parse(responseBody);
 }
 
-export async function fetchResumeInsights(
-  userId: number,
-): Promise<r.ResumeInsightsResponse> {
-  const response = await fetch(`/api/resume?userId=${userId}`, {
+export async function fetchResumeInsights(): Promise<r.ResumeInsightsResponse> {
+  const response = await fetch("/api/resume", {
     method: "GET",
     cache: "no-store",
   });
@@ -42,31 +38,16 @@ export async function fetchResumeInsights(
 
   return {
     resumeId: Number(responseBody.resumeId),
-    userId: Number(responseBody.userId),
     originalFileName: String(responseBody.originalFileName),
     parsedContext: r.parsedResumeContextSchema.parse(
       responseBody.parsedContext,
     ),
     suggestions,
+    latestChatId:
+      responseBody.latestChatId == null ? null : Number(responseBody.latestChatId),
+    latestChatTitle:
+      responseBody.latestChatTitle == null
+        ? null
+        : String(responseBody.latestChatTitle),
   };
-}
-
-export async function askResumeAssistant(
-  payload: r.ResumeChatRequest,
-): Promise<r.ResumeChatResponse> {
-  const response = await fetch("/api/resume/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const responseBody = await response.json();
-
-  if (!response.ok) {
-    throw new Error(r.toErrorMessage(responseBody));
-  }
-
-  return r.resumeChatResponseSchema.parse(responseBody);
 }

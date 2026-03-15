@@ -1,32 +1,81 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+
 import * as r from "@/src/imports/resume.imports";
+import { auth } from "@/src/lib/auth/auth";
 import { pgdb } from "@/src/lib/db/pg/db";
+import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
+import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import {
+  resumeChatsTable,
   resumeSuggestionsTable,
   resumesTable,
   usersTable,
 } from "@/src/lib/db/schema";
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const parsedQuery = r.userIdQuerySchema.safeParse({
-    userId: requestUrl.searchParams.get("userId"),
-  });
+function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+  const rawId = session?.user?.id;
+  const parsed = Number(rawId);
 
-  if (!parsedQuery.success) {
-    return NextResponse.json(
-      { message: r.getZodErrorMessage(parsedQuery.error) },
-      { status: 400 },
-    );
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
   }
+
+  return parsed;
+}
+
+function createChatTitle(
+  originalFileName: string,
+  parsedContext: r.ParsedResumeContext,
+): string {
+  const role = parsedContext.recommendedRoles[0] ?? "Resume";
+  const baseName = originalFileName.replace(/\.[^/.]+$/, "").trim() || "resume";
+  return `${role} - ${baseName}`.slice(0, 255);
+}
+
+function inferMimeType(file: File): string {
+  if (file.type?.trim()) {
+    return file.type;
+  }
+
+  const lowerName = file.name.toLowerCase();
+
+  if (lowerName.endsWith(".pdf")) {
+    return "application/pdf";
+  }
+
+  if (lowerName.endsWith(".md") || lowerName.endsWith(".txt")) {
+    return "text/plain";
+  }
+
+  if (lowerName.endsWith(".doc")) {
+    return "application/msword";
+  }
+
+  if (lowerName.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+
+  return "application/octet-stream";
+}
+
+export async function GET() {
+  const session = await auth();
+  const sessionUserId = getSessionUserId(session);
+
+  if (!sessionUserId) {
+    return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+  }
+
+  await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
 
   try {
     const [latestResume] = await pgdb
       .select()
       .from(resumesTable)
-      .where(eq(resumesTable.userId, parsedQuery.data.userId))
+      .where(eq(resumesTable.userId, sessionUserId))
       .orderBy(desc(resumesTable.createdAt))
       .limit(1);
 
@@ -42,14 +91,25 @@ export async function GET(request: Request) {
       .from(resumeSuggestionsTable)
       .where(
         and(
-          eq(resumeSuggestionsTable.userId, parsedQuery.data.userId),
+          eq(resumeSuggestionsTable.userId, sessionUserId),
           eq(resumeSuggestionsTable.resumeId, latestResume.id),
         ),
       );
 
+    const [latestChat] = await pgdb
+      .select()
+      .from(resumeChatsTable)
+      .where(
+        and(
+          eq(resumeChatsTable.userId, sessionUserId),
+          eq(resumeChatsTable.resumeId, latestResume.id),
+        ),
+      )
+      .orderBy(desc(resumeChatsTable.updatedAt))
+      .limit(1);
+
     const responseBody: r.ResumeInsightsResponse = {
       resumeId: latestResume.id,
-      userId: latestResume.userId,
       originalFileName: latestResume.originalFileName,
       parsedContext: r.parsedResumeContextSchema.parse(
         latestResume.parsedContext,
@@ -57,6 +117,8 @@ export async function GET(request: Request) {
       suggestions: suggestions.map((item) =>
         r.resumeSuggestionSchema.parse(item),
       ),
+      latestChatId: latestChat?.id ?? null,
+      latestChatTitle: latestChat?.title ?? null,
     };
 
     return NextResponse.json(responseBody, { status: 200 });
@@ -69,21 +131,19 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const session = await auth();
+  const sessionUserId = getSessionUserId(session);
+
+  if (!sessionUserId) {
+    return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+  }
+
+  await ensureChatTablesExist();
+  await ensureResumeStorageColumnsExist();
+
   try {
     const formData = await request.formData();
-    const rawUserId = formData.get("userId");
     const rawFile = formData.get("file");
-
-    const parsedBody = r.uploadResumeBodySchema.safeParse({
-      userId: rawUserId,
-    });
-
-    if (!parsedBody.success) {
-      return NextResponse.json(
-        { message: r.getZodErrorMessage(parsedBody.error) },
-        { status: 400 },
-      );
-    }
 
     if (!(rawFile instanceof File)) {
       return NextResponse.json(
@@ -104,7 +164,7 @@ export async function POST(request: Request) {
     const [user] = await pgdb
       .select()
       .from(usersTable)
-      .where(eq(usersTable.id, parsedBody.data.userId))
+      .where(eq(usersTable.id, sessionUserId))
       .limit(1);
 
     if (!user) {
@@ -120,16 +180,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const fileBase64 = Buffer.from(await rawFile.arrayBuffer()).toString("base64");
     const parsedContext = r.buildParsedContextFromText(parsedText);
     const safeFileName = r.toSafeFileName(rawFile.name);
-    const fileUrl = `uploads/resumes/${Date.now()}_${safeFileName}`;
+    const fileUrl = `db://resumes/${Date.now()}_${safeFileName}`;
 
     const [savedResume] = await pgdb
       .insert(resumesTable)
       .values({
-        userId: parsedBody.data.userId,
+        userId: sessionUserId,
         originalFileName: rawFile.name,
         fileUrl,
+        fileMimeType: inferMimeType(rawFile),
+        fileDataBase64: fileBase64,
         parsedText,
         parsedContext,
       })
@@ -158,12 +221,30 @@ export async function POST(request: Request) {
       )
       .returning();
 
+    let chat: { id: number; title: string } | null = null;
+
+    try {
+      const [savedChat] = await pgdb
+        .insert(resumeChatsTable)
+        .values({
+          userId: savedResume.userId,
+          resumeId: savedResume.id,
+          title: createChatTitle(rawFile.name, parsedContext),
+        })
+        .returning();
+
+      chat = { id: savedChat.id, title: savedChat.title };
+    } catch {
+      chat = null;
+    }
+
     const responseBody = r.resumeUploadResponseSchema.parse({
       resumeId: savedResume.id,
-      userId: savedResume.userId,
       parsedContext,
       suggestions: savedSuggestions,
       tokenUsage: aiResult.tokenUsage,
+      chatId: chat?.id ?? null,
+      chatTitle: chat?.title ?? null,
     });
 
     return NextResponse.json(responseBody, { status: 201 });
@@ -181,3 +262,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
