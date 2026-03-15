@@ -1,4 +1,3 @@
-import { userIdQuerySchema } from './../types/resume.types';
 export {
   type ResumeInsightsResponse,
   type ResumeUploadResponse,
