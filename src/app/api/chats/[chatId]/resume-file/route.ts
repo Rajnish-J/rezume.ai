@@ -7,7 +7,9 @@ import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
 import { ensureResumeStorageColumnsExist } from "@/src/lib/db/pg/ensure-resume-schema";
 import { resumeChatsTable, resumesTable } from "@/src/lib/db/schema";
 
-function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+type SessionLike = { user?: { id?: string | null } } | null;
+
+function getSessionUserId(session: SessionLike): number | null {
   const rawId = session?.user?.id;
   const parsed = Number(rawId);
 

@@ -6,7 +6,9 @@ import { pgdb } from "@/src/lib/db/pg/db";
 import { ensureChatTablesExist } from "@/src/lib/db/pg/ensure-chat-schema";
 import { resumeChatMessagesTable, resumeChatsTable } from "@/src/lib/db/schema";
 
-function getSessionUserId(session: Awaited<ReturnType<typeof auth>>): number | null {
+type SessionLike = { user?: { id?: string | null } } | null;
+
+function getSessionUserId(session: SessionLike): number | null {
   const rawId = session?.user?.id;
   const parsed = Number(rawId);
 
